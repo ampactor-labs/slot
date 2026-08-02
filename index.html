@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slot — the trumpet as a lookup table</title>
+<meta name="description" content="Every note a trumpet can play, and the two errors that add up in each one.">
+<style>
+:root {
+  --paper:#ece9e2; --ink:#16181c; --rule:#16181c; --faint:#6b6f78; --wash:#e2ded4;
+  --sharp:#b05f1d; --flat:#3d6391; --true:#4a7a4f;
+  --cell:#f5f3ee; --edge:rgba(22,24,28,.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper:#101114; --ink:#e8e5dd; --rule:#e8e5dd; --faint:#8f939c; --wash:#1a1c21;
+          --sharp:#d98a4a; --flat:#7d9cc4; --true:#7fae84;
+          --cell:#16181d; --edge:rgba(232,229,221,.16); }
+}
+* { box-sizing:border-box; }
+html { background:var(--paper); -webkit-text-size-adjust:100%; }
+body {
+  margin:0; padding:1.1rem .85rem 4rem; background:var(--paper); color:var(--ink);
+  font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif; line-height:1.5;
+}
+.wrap { max-width:46rem; margin:0 auto; }
+.cond { font-family:"Arial Narrow","Helvetica Neue",Arial,sans-serif; font-stretch:condensed;
+        text-transform:uppercase; letter-spacing:.14em; }
+.mono { font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;
+        font-variant-numeric:tabular-nums; }
+
+/* ── masthead ─────────────────────────────────────────────── */
+header { border:3px solid var(--rule); padding:.9rem 1rem .8rem; }
+header h1 { margin:0; font-size:clamp(2rem,11vw,3.2rem); line-height:.9; }
+header .sub { margin:.5rem 0 0; font-size:.76rem; color:var(--faint); }
+header p.lede { margin:.7rem 0 0; font-size:.93rem; max-width:34rem; }
+
+/* ── control bar ──────────────────────────────────────────── */
+.bar { display:flex; flex-wrap:wrap; gap:.4rem; margin:1rem 0 .55rem; align-items:center; }
+.bar .lab { font-size:.68rem; color:var(--faint); margin-right:.1rem; }
+button {
+  font:inherit; font-size:.74rem; letter-spacing:.09em; text-transform:uppercase;
+  font-family:"Arial Narrow","Helvetica Neue",Arial,sans-serif; font-stretch:condensed;
+  background:var(--paper); color:var(--ink); border:1.5px solid var(--rule);
+  padding:.4rem .6rem; cursor:pointer; border-radius:0;
+}
+button:hover { background:var(--wash); }
+button[aria-pressed="true"] { background:var(--ink); color:var(--paper); }
+button:focus-visible { outline:2px solid var(--sharp); outline-offset:2px; }
+button:disabled { opacity:.4; cursor:default; }
+button.wide { flex:1 1 auto; }
+
+/* ── the lattice ──────────────────────────────────────────── */
+.scroller { overflow-x:auto; margin:0 -.85rem; padding:0 .85rem; }
+.lattice { display:grid; grid-template-columns:2.1rem repeat(7,minmax(3.3rem,1fr));
+           gap:2px; min-width:26rem; }
+.colhead { padding:.25rem 0 .35rem; text-align:center; }
+.valves { display:flex; gap:2px; justify-content:center; margin-bottom:.2rem; }
+.valves i { width:8px; height:8px; border:1.3px solid var(--ink); border-radius:50%;
+            display:block; }
+.valves i.on { background:var(--ink); }
+.colhead .nm { font-size:.6rem; color:var(--faint); letter-spacing:.06em; }
+.rowhead { display:flex; align-items:center; justify-content:flex-end; padding-right:.3rem;
+           font-size:.72rem; color:var(--faint); }
+
+.cell {
+  position:relative; background:var(--cell); border:1px solid var(--edge);
+  padding:.3rem .15rem .45rem; text-align:center; cursor:pointer; color:inherit;
+  display:flex; flex-direction:column; align-items:center; gap:.08rem;
+  min-height:3.1rem; transition:background .12s;
+}
+.cell:hover { border-color:var(--ink); }
+/* selection is an outline, never an inversion — the cell's fill is carrying the
+   error colour and cannot be spent on saying "you clicked me". */
+.cell[aria-pressed="true"] { background:var(--cell); color:inherit;
+                             outline:2.5px solid var(--ink); outline-offset:-2px; z-index:2; }
+.cell .note { font-size:.95rem; font-weight:600; letter-spacing:.01em; line-height:1.05; }
+.cell .note .oct { font-size:.62em; color:var(--faint); font-weight:400; }
+.cell .dev { font-size:.6rem; color:var(--faint); line-height:1; }
+.cell.sharp .dev { color:var(--sharp); }
+.cell.flat  .dev { color:var(--flat); }
+.cell .dv { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--edge); }
+.cell .dv b { position:absolute; top:0; bottom:0; display:block; }
+.cell.sharp .dv b { background:var(--sharp); left:50%; }
+.cell.flat  .dv b { background:var(--flat);  right:50%; }
+.cell .dv::after { content:""; position:absolute; left:50%; top:-1px; bottom:-1px;
+                   width:1px; background:var(--faint); opacity:.6; }
+.cell.lit { background:var(--ink); }
+.cell.lit .note, .cell.lit .dev, .cell.lit .oct { color:var(--paper); }
+.cell.row7 { border-style:dashed; }
+.cell.row7 .note { opacity:.62; font-style:italic; }
+.rowhead.r7 { font-style:italic; }
+.legend { display:flex; gap:.9rem; flex-wrap:wrap; margin:.5rem 0 0; font-size:.66rem;
+          color:var(--faint); }
+.legend b { font-weight:600; }
+.legend .k { color:var(--flat); } .legend .s { color:var(--sharp); }
+
+/* ── inspector ────────────────────────────────────────────── */
+.inspect { border:2px solid var(--rule); margin-top:1.1rem; padding:.75rem .8rem .8rem; }
+.inspect h2 { margin:0 0 .5rem; font-size:.72rem; color:var(--faint); }
+.tit { display:flex; align-items:baseline; gap:.55rem; flex-wrap:wrap; margin-bottom:.55rem; }
+.tit .big { font-size:1.5rem; font-weight:600; }
+.tit .alt { font-size:.8rem; color:var(--faint); }
+.sum { font-size:.78rem; line-height:1.75; margin:0 0 .55rem; }
+.sum .r { display:grid; grid-template-columns:6.4rem 4.2rem 1fr; gap:.4rem; align-items:baseline; }
+.sum .r .amt { text-align:right; }
+.sum .r.tot { border-top:1.5px solid var(--rule); margin-top:.25rem; padding-top:.25rem;
+              font-weight:600; }
+.sum .why { font-size:.7rem; color:var(--faint); }
+.pos { color:var(--sharp); } .neg { color:var(--flat); } .zero { color:var(--faint); }
+.kick { font-size:.75rem; color:var(--faint); margin:.15rem 0 .6rem; }
+.kick b { color:var(--ink); font-weight:600; }
+
+/* ── rig ──────────────────────────────────────────────────── */
+.rig { margin-top:1.1rem; border-top:2px solid var(--rule); padding-top:.7rem; }
+.rig h2 { margin:0 0 .5rem; font-size:.72rem; color:var(--faint); }
+.slider { margin:0 0 .7rem; }
+.slider .top { display:flex; justify-content:space-between; align-items:baseline;
+               font-size:.74rem; gap:.5rem; }
+.slider .top .v { font-size:.72rem; color:var(--faint); }
+input[type=range] { width:100%; margin:.25rem 0 0; accent-color:var(--sharp); }
+
+/* ── listener ─────────────────────────────────────────────── */
+.ear { margin-top:1.1rem; border:2px solid var(--rule); padding:.7rem .8rem .8rem; }
+.ear h2 { margin:0 0 .5rem; font-size:.72rem; color:var(--faint); }
+.ear .read { display:flex; gap:1.1rem; flex-wrap:wrap; align-items:baseline; min-height:2.4rem; }
+.ear .hz { font-size:1.4rem; font-weight:600; }
+.ear .where { font-size:.82rem; }
+.ear .steady { font-size:.7rem; color:var(--faint); }
+.meter { position:relative; height:22px; margin-top:.5rem; border:1px solid var(--edge);
+         background:var(--cell); }
+.meter::after { content:""; position:absolute; left:50%; top:0; bottom:0; width:1px;
+                background:var(--faint); }
+.meter .needle { position:absolute; top:2px; bottom:2px; width:3px; background:var(--ink);
+                 left:50%; transition:left .07s linear; }
+.meter .ok { position:absolute; top:0; bottom:0; left:calc(50% - 5%); width:10%;
+             background:var(--edge); }
+.hint { font-size:.7rem; color:var(--faint); margin:.45rem 0 0; }
+
+/* ── prose ────────────────────────────────────────────────── */
+.notes { margin-top:1.6rem; border-top:2px solid var(--rule); padding-top:.9rem; }
+.notes h2 { font-size:.78rem; letter-spacing:.16em; margin:1.2rem 0 .45rem; }
+.notes h2:first-child { margin-top:0; }
+.notes p { font-size:.88rem; margin:.5rem 0; }
+.notes ul { font-size:.85rem; padding-left:1.1rem; margin:.4rem 0; }
+.notes li { margin:.25rem 0; }
+.notes code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.85em;
+              background:var(--wash); padding:.05em .3em; }
+footer { margin-top:1.6rem; font-size:.68rem; color:var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1 class="cond">Slot</h1>
+  <p class="sub cond">B♭ trumpet · seven tube lengths × the overtone series</p>
+  <p class="lede">Three valves give you seven lengths of pipe. Your face picks a partial on
+  whichever one you're holding. That's the whole instrument: a seven-by-seven table, of
+  which nine cells are in tune and the other forty are wrong for one of exactly two
+  reasons.</p>
+</header>
+
+<div class="bar">
+  <span class="lab cond">Errors</span>
+  <button id="tPart" aria-pressed="true">Overtone series</button>
+  <button id="tValve" aria-pressed="true">Valve arithmetic</button>
+  <span class="lab cond" style="margin-left:.5rem">Read as</span>
+  <button id="tPitch" aria-pressed="false">Concert</button>
+</div>
+
+<div class="scroller">
+  <div class="lattice" id="lattice"></div>
+</div>
+<div class="legend">
+  <span><b class="k">◀ blue</b> flat</span>
+  <span><b class="s">orange ▶</b> sharp</span>
+  <span>bar full-width at ±50¢</span>
+  <span><i>dashed row</i> = 7th partial, the one method books tell you to avoid</span>
+</div>
+
+<section class="inspect" id="inspect">
+  <h2 class="cond">The cell</h2>
+  <div class="tit">
+    <span class="big" id="iName">—</span>
+    <span class="alt" id="iAlt"></span>
+  </div>
+  <div class="sum mono" id="iSum"></div>
+  <p class="kick" id="iKick"></p>
+  <div class="bar" style="margin:0">
+    <button id="bPlay">Hear it</button>
+    <button id="bErr">Hear the error</button>
+    <button id="bTrue">Kick the slide true</button>
+  </div>
+</section>
+
+<section class="rig">
+  <h2 class="cond">The rig</h2>
+
+  <div class="slider">
+    <div class="top"><label for="s3" class="cond">Third-valve slide</label>
+      <span class="v mono" id="v3">out 0.0 mm</span></div>
+    <input type="range" id="s3" min="0" max="40" step="0.1" value="0">
+  </div>
+
+  <div class="slider">
+    <div class="top"><label for="s1" class="cond">First-valve slide</label>
+      <span class="v mono" id="v1">out 0.0 mm</span></div>
+    <input type="range" id="s1" min="0" max="20" step="0.1" value="0">
+  </div>
+
+  <div class="slider">
+    <div class="top"><label for="cut3" class="cond">How long valve 3 is cut</label>
+      <span class="v mono" id="vcut">3.00 semitones</span></div>
+    <input type="range" id="cut3" min="3" max="3.4" step="0.01" value="3">
+  </div>
+
+  <div class="bar">
+    <span class="lab cond">Preset</span>
+    <button id="pIdeal">Ideal cut</button>
+    <button id="pMaker">Maker's compromise</button>
+    <button id="pReset">Slides in</button>
+  </div>
+</section>
+
+<section class="ear">
+  <h2 class="cond">The ear</h2>
+  <div class="read">
+    <span class="hz mono" id="eHz">—</span>
+    <span class="where" id="eWhere">Play into the mic and it will tell you which slot and
+      which partial you actually landed on.</span>
+  </div>
+  <div class="meter"><span class="ok"></span><span class="needle" id="eNeedle"></span></div>
+  <div class="bar" style="margin-top:.55rem">
+    <button id="bListen">Listen</button>
+    <span class="steady mono" id="eSteady"></span>
+  </div>
+  <p class="hint" id="eHint">Needs a microphone and a secure origin — open this over
+    <code>localhost</code>, not <code>file://</code>, or the browser will refuse.</p>
+</section>
+
+<section class="notes">
+  <h2 class="cond">The lie in the arithmetic</h2>
+  <p>To drop a pitch by one semitone you have to <em>multiply</em> the tube by 1.0595.
+  A valve can only <em>add</em> a fixed length of pipe, and the pipe it adds was cut for
+  the open horn. Press valve 1 and the horn is already 12% longer; valve 3's tubing,
+  still sized for the short horn, is now too short for the job it has been handed. The
+  shortfall compounds. Nobody's tubing is cut wrong. The mistake is thinking you can add
+  your way through a multiplication.</p>
+  <p>So the columns go progressively sharp: 1-2 by 10.6 cents, 2-3 by 15.5, 1-3 by 30.3,
+  and all three down by 53.6. That last one is more than a quarter tone off, and no
+  amount of care at the bench can fix it, because it isn't a manufacturing error.</p>
+
+  <h2 class="cond">The other error, and where they cancel</h2>
+  <p>The rows are wrong for an unrelated reason. Partials are whole-number multiples of
+  the fundamental and equal temperament isn't: the 3rd partial sits 1.96 cents above the
+  tempered fifth, the 5th sits 13.7 cents <em>below</em> the tempered third, the 7th a
+  full 31.2 below. Turn the two layers on and off above and you can watch which is which.
+  Rows move together; columns move together.</p>
+  <p>Since one error lives in the rows and the other in the columns, a cell is just their
+  sum. That is not an approximation. Cents are logarithms, the two errors are independent
+  ratios, and they add to the last decimal place; <code>tools/horn-check.mjs</code>
+  asserts a residual under 10<sup>−12</sup> across all forty-nine cells.</p>
+  <p>Which means the flat partials are the only correction the horn owns for its sharp
+  slots. The worst note on the instrument is written C♯4, the 3rd partial with all three
+  valves down, where a sharp row lands on the sharpest column: <b>+55.5 cents</b>. And the
+  one place the two errors nearly annihilate is written F5 taken on the 7th partial with
+  1-3, at −0.86 cents. The most in-tune fingering on the horn is built from the partial
+  you're told never to use and the valve combination that is furthest wrong.</p>
+
+  <h2 class="cond">Why the slide moves</h2>
+  <p>Makers already cut valve 3 long to spread the damage. Drag <i>how long valve 3 is
+  cut</i> and watch it buy down 1-3 and 1-2-3 by sending slot 3 alone flat. No fixed
+  length fixes all three, which is why the third slide has a ring on it and your left
+  hand has a job. Kick it 18.2 mm for low D and 32.9 mm for low C♯: about three quarters
+  of an inch, then about an inch and a third. Those two numbers come out of the tube
+  lengths, not out of a method book, and they are what the ring is for.</p>
+
+  <h2 class="cond">What this doesn't model</h2>
+  <ul>
+    <li><b>The player.</b> Lips bend a note by tens of cents on purpose, which is why the
+      mic is here. Every number above is what the tube wants, not what comes out.</li>
+    <li><b>The bell and mouthpiece.</b> Real resonances aren't exact harmonics; the flare
+      and the cup drag them into near-alignment, and the lip mode-locks the rest. The
+      pedal tone below partial 2 exists for that reason and is left off the chart.</li>
+    <li><b>Your actual horn.</b> Acoustic length is taken as 1473 mm (4′10″) with ideal
+      cuts. Bore, gap, and taper move real slides by millimeters. Set the cut slider to
+      what your horn does and the rest follows.</li>
+    <li><b>Temperature.</b> A cold horn is a sharp horn; nothing here knows the room.</li>
+  </ul>
+</section>
+
+<footer class="mono">
+  Numbers reproduce with <code>node tools/horn-check.mjs</code>.
+  No dependencies, no build, no network.
+</footer>
+
+</div>
+
+<script>
+"use strict";
+/* ══ the horn ═══════════════════════════════════════════════════════════
+   One model, one place. Everything drawn or sounded reads from here.      */
+
+var SEMI = Math.pow(2, 1/12);
+var A4 = 440;
+var F1_MIDI = 46;                       // concert B♭2, the nominal fundamental
+var F1 = A4 * Math.pow(2, (F1_MIDI - 69) / 12);
+var L_OPEN = 1473;                      // mm, 4′10″
+var TRANSPOSE = 2;                      // B♭ horn: written sounds a major second lower
+
+var SLOTS = [
+  { v:[],      semis:0, nm:"open"  },
+  { v:[2],     semis:1, nm:"2"     },
+  { v:[1],     semis:2, nm:"1"     },
+  { v:[1,2],   semis:3, nm:"1-2"   },
+  { v:[2,3],   semis:4, nm:"2-3"   },
+  { v:[1,3],   semis:5, nm:"1-3"   },
+  { v:[1,2,3], semis:6, nm:"1-2-3" }
+];
+var PARTIALS = [8,7,6,5,4,3,2];         // drawn high to low
+var NAMES = ["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
+
+var rig = { cut3:3.0, pull3:0, pull1:0, showPartial:true, showValve:true, concert:false };
+
+function valveLen(v) {
+  if (v === 1) return L_OPEN * (Math.pow(SEMI, 2) - 1) + 2 * rig.pull1;
+  if (v === 2) return L_OPEN * (Math.pow(SEMI, 1) - 1);
+  return L_OPEN * (Math.pow(SEMI, rig.cut3) - 1) + 2 * rig.pull3;  // a U-slide adds twice the pull
+}
+function slotLen(slot) {
+  var L = L_OPEN;
+  for (var i = 0; i < slot.v.length; i++) L += valveLen(slot.v[i]);
+  return L;
+}
+/* The two error layers. `full` ignores the display toggles: the ear always
+   listens against the real horn, because matching a live note to a horn whose
+   errors you switched off means nothing. */
+function slotCents(slot, full) {
+  if (!full && !rig.showValve) return 0;
+  return 1200 * Math.log2(L_OPEN * Math.pow(SEMI, slot.semis) / slotLen(slot));
+}
+function partialCents(p, full) {
+  if (!full && !rig.showPartial) return 0;
+  var above = 1200 * Math.log2(p);
+  return above - 100 * Math.round(above / 100);
+}
+function targetMidi(p, slot) {           // the tempered note the fingering aims at
+  return F1_MIDI + Math.round(12 * Math.log2(p)) - slot.semis;
+}
+function midiHz(m) { return A4 * Math.pow(2, (m - 69) / 12); }
+function noteName(m) {
+  return { pc:NAMES[((m % 12) + 12) % 12], oct:Math.floor(m / 12) - 1 };
+}
+function cell(p, si, full) {
+  var slot = SLOTS[si];
+  var row = partialCents(p, full), col = slotCents(slot, full);
+  var midi = targetMidi(p, slot);
+  return {
+    p:p, si:si, slot:slot, row:row, col:col, cents:row + col,
+    concertMidi:midi, writtenMidi:midi + TRANSPOSE,
+    targetHz:midiHz(midi),
+    actualHz:midiHz(midi) * Math.pow(2, (row + col) / 1200)
+  };
+}
+/* How far the third slide must come out, in mm of pull, to land this cell on the
+   note it is aiming at. Only valve 3 has a ring on it. */
+function throwFor(c) {
+  if (!rig.showValve || c.slot.v.indexOf(3) < 0) return null;
+  var need = L_OPEN * Math.pow(SEMI, c.slot.semis) * Math.pow(2, partialCents(c.p) / 1200);
+  return (need - slotLen(c.slot)) / 2 + rig.pull3;
+}
+
+/* ══ sound ══════════════════════════════════════════════════════════════ */
+
+var ac = null, master = null;
+function audio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain();
+    master.gain.value = 0.9;
+    master.connect(ac.destination);
+  }
+  if (ac.state === "suspended") ac.resume();
+  return ac;
+}
+var WAVE = null;
+function brass() {                       // 1/n-ish partials, gentle formant lift
+  if (!WAVE) {
+    var im = [0, 1, .58, .38, .26, .18, .13, .09, .065, .045, .03];
+    WAVE = ac.createPeriodicWave(new Float32Array(im.length), new Float32Array(im),
+                                 { disableNormalization:false });
+  }
+  return WAVE;
+}
+function blow(hz, t0, dur, gain) {
+  audio();
+  var o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+  o.setPeriodicWave(brass());
+  o.frequency.value = hz;
+  f.type = "lowpass"; f.Q.value = .6;
+  f.frequency.setValueAtTime(Math.min(hz * 2.2, 9000), t0);
+  f.frequency.linearRampToValueAtTime(Math.min(hz * 6, 11000), t0 + .07);
+  f.frequency.linearRampToValueAtTime(Math.min(hz * 3.4, 9000), t0 + dur);
+  var pk = gain === undefined ? .3 : gain;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(pk, t0 + .028);
+  g.gain.setValueAtTime(pk, t0 + dur - .1);
+  g.gain.exponentialRampToValueAtTime(.0006, t0 + dur);
+  o.connect(f); f.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + .05);
+  return o;
+}
+/* target, then what the horn does, then both at once. At 10 cents that last
+   stretch beats; at 55 it just sounds like two different notes. */
+function hearError(c) {
+  audio();
+  var t = ac.currentTime + .05;
+  blow(c.targetHz, t, .85);
+  blow(c.actualHz, t + 1.0, .85);
+  blow(c.targetHz, t + 2.05, 2.6, .22);
+  blow(c.actualHz, t + 2.05, 2.6, .22);
+}
+
+/* ══ the lattice ════════════════════════════════════════════════════════ */
+
+var latticeEl = document.getElementById("lattice");
+var selected = { p:2, si:6 };
+var cellEls = {};
+var litEl = null;               // the cell the mic is currently lighting
+
+function buildLattice() {
+  latticeEl.innerHTML = "";
+  cellEls = {};
+  latticeEl.appendChild(document.createElement("div"));   // corner
+  SLOTS.forEach(function (slot) {
+    var h = document.createElement("div");
+    h.className = "colhead";
+    var vs = document.createElement("div");
+    vs.className = "valves";
+    [1,2,3].forEach(function (v) {
+      var i = document.createElement("i");
+      if (slot.v.indexOf(v) >= 0) i.className = "on";
+      vs.appendChild(i);
+    });
+    var nm = document.createElement("div");
+    nm.className = "nm mono"; nm.textContent = slot.nm;
+    h.appendChild(vs); h.appendChild(nm);
+    latticeEl.appendChild(h);
+  });
+
+  PARTIALS.forEach(function (p) {
+    var rh = document.createElement("div");
+    rh.className = "rowhead mono" + (p === 7 ? " r7" : "");
+    rh.textContent = p;
+    rh.title = "partial " + p;
+    latticeEl.appendChild(rh);
+
+    SLOTS.forEach(function (slot, si) {
+      var b = document.createElement("button");
+      b.className = "cell" + (p === 7 ? " row7" : "");
+      b.type = "button";
+      b.innerHTML = '<span class="note"></span><span class="dev mono"></span>' +
+                    '<span class="dv"><b></b></span>';
+      b.addEventListener("click", function () { select(p, si, true); });
+      latticeEl.appendChild(b);
+      cellEls[p + ":" + si] = b;
+    });
+  });
+  paint();
+}
+
+function paint() {
+  PARTIALS.forEach(function (p) {
+    SLOTS.forEach(function (slot, si) {
+      var c = cell(p, si), el = cellEls[p + ":" + si];
+      var m = rig.concert ? c.concertMidi : c.writtenMidi;
+      var n = noteName(m);
+      el.querySelector(".note").innerHTML = n.pc + '<span class="oct">' + n.oct + "</span>";
+      var d = c.cents;
+      el.querySelector(".dev").textContent =
+        (Math.abs(d) < .05 ? "0" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1));
+      el.className = "cell" + (p === 7 ? " row7" : "") +
+                     (Math.abs(d) < .05 ? "" : d > 0 ? " sharp" : " flat") +
+                     (el === litEl ? " lit" : "");
+      el.querySelector(".dv b").style.width = Math.min(50, Math.abs(d)) + "%";
+      el.setAttribute("aria-pressed", (selected.p === p && selected.si === si) ? "true" : "false");
+      var w = noteName(c.writtenMidi);
+      el.setAttribute("aria-label",
+        "written " + w.pc + w.oct + ", partial " + p + ", valves " + slot.nm +
+        ", " + d.toFixed(1) + " cents");
+    });
+  });
+  paintInspector();
+}
+
+/* ══ inspector ══════════════════════════════════════════════════════════ */
+
+function signed(x) {
+  if (Math.abs(x) < .05) return { t:"0.0", k:"zero" };
+  return { t:(x > 0 ? "+" : "−") + Math.abs(x).toFixed(1), k:x > 0 ? "pos" : "neg" };
+}
+function paintInspector() {
+  var c = cell(selected.p, selected.si);
+  var w = noteName(c.writtenMidi), cn = noteName(c.concertMidi);
+  document.getElementById("iName").textContent =
+    (rig.concert ? cn.pc + cn.oct : w.pc + w.oct);
+  document.getElementById("iAlt").textContent =
+    (rig.concert ? "written " + w.pc + w.oct : "concert " + cn.pc + cn.oct) +
+    " · partial " + c.p + " on " + c.slot.nm + " · " + c.actualHz.toFixed(1) + " Hz";
+
+  var rowWhy = c.p === 7 ? "the septimal seventh, nowhere near the grid"
+             : c.p === 5 ? "a pure major third, flat of the tempered one"
+             : (c.p === 3 || c.p === 6) ? "a pure fifth, a hair above tempered"
+             : "an octave, exact by definition";
+  var colWhy = c.slot.v.length === 0 ? "no valves, nothing to get wrong"
+             : c.slot.v.length === 1 ? "one slide, cut for exactly this job"
+             : "slides sized for the open horn, added to a longer horn";
+  var r = signed(c.row), k = signed(c.col), t = signed(c.cents);
+  document.getElementById("iSum").innerHTML =
+    '<div class="r"><span>partial ' + c.p + '</span>' +
+    '<span class="amt ' + r.k + '">' + r.t + '¢</span>' +
+    '<span class="why">' + rowWhy + '</span></div>' +
+    '<div class="r"><span>valves ' + c.slot.nm + '</span>' +
+    '<span class="amt ' + k.k + '">' + k.t + '¢</span>' +
+    '<span class="why">' + colWhy + '</span></div>' +
+    '<div class="r tot"><span>what sounds</span>' +
+    '<span class="amt ' + t.k + '">' + t.t + '¢</span>' +
+    '<span class="why">' + (Math.abs(c.cents) < 5 ? "close enough to let go"
+      : Math.abs(c.cents) < 20 ? "audible; lip it or slide it"
+      : "you cannot lip this away") + '</span></div>';
+
+  var th = throwFor(c);
+  var kick = document.getElementById("iKick");
+  var btn = document.getElementById("bTrue");
+  if (th === null) {
+    kick.innerHTML = "No valve 3 in this fingering, so the third slide can't reach it. " +
+      (c.slot.v.indexOf(1) >= 0 ? "The first-valve saddle is the same trick one valve over."
+                                : "This one is your lip's problem.");
+    btn.disabled = true;
+  } else if (th <= 0.05) {
+    kick.innerHTML = "Already true with the slide where it is.";
+    btn.disabled = true;
+  } else {
+    kick.innerHTML = "Kick the third slide <b>" + th.toFixed(1) + " mm</b> (" +
+      (th / 25.4).toFixed(2) + " in) to bring this one home.";
+    btn.disabled = false;
+  }
+}
+
+function select(p, si, play) {
+  selected = { p:p, si:si };
+  paint();
+  if (play) blow(cell(p, si).actualHz, audio().currentTime + .01, .9);
+}
+
+/* ══ controls ═══════════════════════════════════════════════════════════ */
+
+function toggle(id, key) {
+  var b = document.getElementById(id);
+  b.addEventListener("click", function () {
+    rig[key] = !rig[key];
+    b.setAttribute("aria-pressed", String(rig[key]));
+    paint();
+  });
+}
+toggle("tPart", "showPartial");
+toggle("tValve", "showValve");
+document.getElementById("tPitch").addEventListener("click", function () {
+  rig.concert = !rig.concert;
+  this.setAttribute("aria-pressed", String(rig.concert));
+  this.textContent = rig.concert ? "Concert" : "Written";
+  paint();
+});
+document.getElementById("tPitch").textContent = "Written";
+
+function wireSlider(id, key, fmt, out) {
+  var el = document.getElementById(id), o = document.getElementById(out);
+  el.addEventListener("input", function () {
+    rig[key] = parseFloat(el.value);
+    o.textContent = fmt(rig[key]);
+    paint();
+  });
+  o.textContent = fmt(rig[key]);
+}
+wireSlider("s3", "pull3", function (v) { return "out " + v.toFixed(1) + " mm"; }, "v3");
+wireSlider("s1", "pull1", function (v) { return "out " + v.toFixed(1) + " mm"; }, "v1");
+wireSlider("cut3", "cut3", function (v) { return v.toFixed(2) + " semitones"; }, "vcut");
+
+function setRig(o) {
+  Object.keys(o).forEach(function (k) { rig[k] = o[k]; });
+  document.getElementById("s3").value = rig.pull3;
+  document.getElementById("s1").value = rig.pull1;
+  document.getElementById("cut3").value = rig.cut3;
+  document.getElementById("v3").textContent = "out " + rig.pull3.toFixed(1) + " mm";
+  document.getElementById("v1").textContent = "out " + rig.pull1.toFixed(1) + " mm";
+  document.getElementById("vcut").textContent = rig.cut3.toFixed(2) + " semitones";
+  paint();
+}
+document.getElementById("pIdeal").addEventListener("click", function () { setRig({ cut3:3.0 }); });
+document.getElementById("pMaker").addEventListener("click", function () { setRig({ cut3:3.2 }); });
+document.getElementById("pReset").addEventListener("click", function () {
+  setRig({ pull3:0, pull1:0 });
+});
+document.getElementById("bPlay").addEventListener("click", function () {
+  var c = cell(selected.p, selected.si);
+  blow(c.actualHz, audio().currentTime + .01, 1.1);
+});
+document.getElementById("bErr").addEventListener("click", function () {
+  hearError(cell(selected.p, selected.si));
+});
+document.getElementById("bTrue").addEventListener("click", function () {
+  var th = throwFor(cell(selected.p, selected.si));
+  if (th !== null && th > 0) setRig({ pull3:Math.min(40, th) });
+});
+
+/* ══ the ear ════════════════════════════════════════════════════════════
+   Normalized autocorrelation over the trumpet's range, with a parabolic
+   refinement on the winning lag. Trumpets have a strong fundamental, so the
+   first-peak rule is enough to keep it off the octave.                     */
+
+var listening = false, an = null, buf = null, stream = null, pitchLog = [], lastTick = 0;
+
+function detect(x, rate) {
+  var loMax = Math.floor(rate / 140), loMin = Math.floor(rate / 1150);
+  var W = Math.min(2048, x.length - loMax);   // correlation window, leaving room for the longest lag
+  var rms = 0, i;
+  for (i = 0; i < W; i++) rms += x[i] * x[i];
+  rms = Math.sqrt(rms / W);
+  if (rms < 0.008) return null;
+
+  var best = -1, bestVal = 0, nsdf = new Float32Array(loMax + 2);
+  for (var lag = loMin; lag <= loMax; lag++) {
+    var ac_ = 0, m = 0;
+    for (i = 0; i < W; i++) {
+      ac_ += x[i] * x[i + lag];
+      m += x[i] * x[i] + x[i + lag] * x[i + lag];
+    }
+    nsdf[lag] = m > 0 ? (2 * ac_) / m : 0;
+    if (nsdf[lag] > bestVal) { bestVal = nsdf[lag]; best = lag; }
+  }
+  if (best < 0 || bestVal < 0.72) return null;
+
+  // first peak clearing 90% of the global max — the fundamental, not an octave
+  var thr = bestVal * 0.9, pick = best;
+  for (lag = loMin + 1; lag < loMax; lag++) {
+    if (nsdf[lag] > thr && nsdf[lag] >= nsdf[lag - 1] && nsdf[lag] >= nsdf[lag + 1]) {
+      pick = lag; break;
+    }
+  }
+  var a = nsdf[pick - 1], b = nsdf[pick], c = nsdf[pick + 1];
+  var d = a - 2 * b + c;
+  var shift = d !== 0 ? 0.5 * (a - c) / d : 0;
+  return { hz:rate / (pick + shift), clarity:bestVal };
+}
+
+function nearestCell(hz) {
+  var best = null;
+  PARTIALS.forEach(function (p) {
+    SLOTS.forEach(function (slot, si) {
+      var c = cell(p, si, true);          // always the real horn, toggles or not
+      var d = 1200 * Math.log2(hz / c.actualHz);
+      if (best === null || Math.abs(d) < Math.abs(best.d)) best = { c:c, d:d };
+    });
+  });
+  return best;
+}
+
+function tick(now) {
+  if (!listening) return;
+  requestAnimationFrame(tick);
+  if (now - lastTick < 33) return;        // ~30 Hz is plenty and halves the correlation cost
+  lastTick = now;
+  an.getFloatTimeDomainData(buf);
+  var r = detect(buf, ac.sampleRate);
+  var hzEl = document.getElementById("eHz"), wEl = document.getElementById("eWhere");
+  var needle = document.getElementById("eNeedle"), stEl = document.getElementById("eSteady");
+
+  if (litEl) { litEl.classList.remove("lit"); litEl = null; }
+  if (r) {
+    var n = nearestCell(r.hz);
+    var c = n.c;
+    var w = noteName(c.writtenMidi), cn = noteName(c.concertMidi);
+    var offTarget = 1200 * Math.log2(r.hz / c.targetHz);
+    hzEl.textContent = r.hz.toFixed(1) + " Hz";
+    wEl.innerHTML = "partial <b>" + c.p + "</b> on <b>" + c.slot.nm + "</b> — written " +
+      w.pc + w.oct + ", concert " + cn.pc + cn.oct + "<br>" +
+      '<span class="steady">' + signed(n.d).t + "¢ from where the tube sits, " +
+      signed(offTarget).t + "¢ from tempered</span>";
+    needle.style.left = "calc(" + (50 + Math.max(-49, Math.min(49, offTarget))) + "% - 1.5px)";
+    litEl = cellEls[c.p + ":" + c.si];
+    if (litEl) litEl.classList.add("lit");
+
+    pitchLog.push(offTarget);
+    if (pitchLog.length > 45) pitchLog.shift();
+    if (pitchLog.length > 12) {
+      var mean = pitchLog.reduce(function (a, b) { return a + b; }, 0) / pitchLog.length;
+      var sd = Math.sqrt(pitchLog.reduce(function (a, b) {
+        return a + (b - mean) * (b - mean); }, 0) / pitchLog.length);
+      stEl.textContent = "steadiness ±" + sd.toFixed(1) + "¢ over " +
+        (pitchLog.length / 30).toFixed(1) + "s";
+    }
+  } else {
+    hzEl.textContent = "—";
+    wEl.textContent = "Listening.";
+    pitchLog.length = 0;
+    stEl.textContent = "";
+  }
+}
+
+document.getElementById("bListen").addEventListener("click", function () {
+  var btn = this, hint = document.getElementById("eHint");
+  if (listening) {
+    listening = false; btn.setAttribute("aria-pressed", "false"); btn.textContent = "Listen";
+    if (litEl) { litEl.classList.remove("lit"); litEl = null; }
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null;
+    document.getElementById("eHz").textContent = "—";
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    hint.textContent = "This browser won't hand over a microphone here. Serve the folder " +
+      "over localhost and try again.";
+    return;
+  }
+  audio();
+  navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+  }).then(function (s) {
+    stream = s;
+    var src = ac.createMediaStreamSource(s);
+    an = ac.createAnalyser();
+    an.fftSize = 4096;
+    buf = new Float32Array(an.fftSize);
+    src.connect(an);
+    listening = true;
+    btn.setAttribute("aria-pressed", "true");
+    btn.textContent = "Stop";
+    hint.textContent = "Long tones show up in the steadiness figure. Anything under " +
+      "±3¢ held for two seconds is a good note.";
+    pitchLog.length = 0;
+    tick();
+  }).catch(function (e) {
+    hint.textContent = "Microphone refused (" + e.name + "). On file:// browsers block it — " +
+      "run python3 -m http.server 8000 in this folder and open localhost:8000.";
+  });
+});
+
+/* ══ go ═════════════════════════════════════════════════════════════════ */
+
+buildLattice();
+select(3, 6, false);      // written C♯4 — the worst note on the horn
+</script>
+</body>
+</html>
