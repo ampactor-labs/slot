@@ -104,6 +104,15 @@ export async function emulate(features) {
   await send("Emulation.setEmulatedMedia", { features });
 }
 
+// Phone-first means the narrow case is the real case, so it gets asserted
+// rather than eyeballed. Pass no width to drop back to the window size.
+export async function viewport(width, height, mobile = true) {
+  if (!width) return send("Emulation.clearDeviceMetricsOverride");
+  await send("Emulation.setDeviceMetricsOverride", {
+    width, height, deviceScaleFactor: 1, mobile,
+  });
+}
+
 export async function shot(path) {
   const { writeFileSync, mkdirSync } = await import("node:fs");
   const { dirname } = await import("node:path");
@@ -136,7 +145,7 @@ export async function check(name, expr, expected, opts) {
 export { sleep };
 
 const { run } = await import(checksFile);
-await run({ check, evalJS, sleep, consoleLog, shot, emulate });
+await run({ check, evalJS, sleep, consoleLog, shot, emulate, viewport });
 
 if (errors.length) {
   failures += errors.length;

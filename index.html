@@ -8,12 +8,12 @@
 <style>
 :root {
   --paper:#ece9e2; --ink:#16181c; --rule:#16181c; --faint:#6b6f78; --wash:#e2ded4;
-  --sharp:#b05f1d; --flat:#3d6391; --true:#4a7a4f;
+  --sharp:#b05f1d; --flat:#3d6391;
   --cell:#f5f3ee; --edge:rgba(22,24,28,.14);
 }
 @media (prefers-color-scheme: dark) {
   :root { --paper:#101114; --ink:#e8e5dd; --rule:#e8e5dd; --faint:#8f939c; --wash:#1a1c21;
-          --sharp:#d98a4a; --flat:#7d9cc4; --true:#7fae84;
+          --sharp:#d98a4a; --flat:#7d9cc4;
           --cell:#16181d; --edge:rgba(232,229,221,.16); }
 }
 * { box-sizing:border-box; }
@@ -59,8 +59,12 @@ button.wide { flex:1 1 auto; }
             display:block; }
 .valves i.on { background:var(--ink); }
 .colhead .nm { font-size:.6rem; color:var(--faint); letter-spacing:.06em; }
+/* The grid is wider than a phone and scrolls; the partial numbers must not go
+   with it, or you lose which row you are reading. */
 .rowhead { display:flex; align-items:center; justify-content:flex-end; padding-right:.3rem;
-           font-size:.72rem; color:var(--faint); }
+           font-size:.72rem; color:var(--faint);
+           position:sticky; left:0; z-index:3; background:var(--paper);
+           box-shadow:2px 0 0 var(--paper); }
 
 .cell {
   position:relative; background:var(--cell); border:1px solid var(--edge);

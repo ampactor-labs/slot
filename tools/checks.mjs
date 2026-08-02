@@ -8,7 +8,7 @@
 
 const near = (want, tol) => (got) => typeof got === "number" && Math.abs(got - want) <= tol;
 
-export async function run({ check, evalJS, sleep, shot, emulate }) {
+export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
   // ── structure ───────────────────────────────────────────────────────────
   await check("lattice cells", "document.querySelectorAll('.cell').length", 49);
   await check("column heads", "document.querySelectorAll('.colhead').length", 7);
@@ -161,6 +161,31 @@ export async function run({ check, evalJS, sleep, shot, emulate }) {
        return [z, 49 - z]; })()`,
     [9, 40]
   );
+
+  // ── the narrow case ─────────────────────────────────────────────────────
+  // The lattice is wider than a phone on purpose and scrolls inside its own
+  // box. The page around it must not.
+  await viewport(360, 740);
+  await sleep(300);
+  await check("no horizontal scroll on a 360px screen",
+    "document.documentElement.scrollWidth <= window.innerWidth", true);
+  await check("the lattice itself does scroll",
+    "(() => { const s = document.querySelector('.scroller');\n       return s.scrollWidth > s.clientWidth; })()", true);
+  await check("every cell is still a 44px tap target",
+    `(() => [...document.querySelectorAll('.cell')]
+       .every(c => c.getBoundingClientRect().height >= 44))()`, true);
+  // Scroll the grid to its far right and the partial numbers must stay put.
+  await check("the partial column stays pinned while the grid scrolls",
+    `(() => { const s = document.querySelector('.scroller');
+       const h = document.querySelector('.rowhead');
+       const before = h.getBoundingClientRect().left;
+       s.scrollLeft = s.scrollWidth;
+       const after = h.getBoundingClientRect().left;
+       s.scrollLeft = 0;
+       return Math.abs(after - before) < 1; })()`, true);
+  await shot("docs/img/phone.png");
+  await viewport(null);
+  await sleep(200);
 
   // ── render, both themes ─────────────────────────────────────────────────
   await evalJS("select(3, 6, false); window.scrollTo(0, 0)");

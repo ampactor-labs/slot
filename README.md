@@ -148,13 +148,16 @@ against the printed fingering chart. Exit code 1 names the first disagreement an
 size.
 
 `node tools/cdp.mjs http://localhost:8000/index.html $PWD/tools/checks.mjs` drives
-headless Chrome and runs 51 checks in the live page: the lattice builds all 49 cells,
+headless Chrome and runs 55 checks in the live page: the lattice builds all 49 cells,
 the toggles zero the layer they name, the written-to-concert transposition holds for
 every cell, the slide corrects what it is pulled for and detunes what it shares, and
 the audio graph builds. It also feeds synthetic tones straight into `detect()`
 (a low C, a high C, a missing fundamental, silence, and noise), because headless Chrome
-has no microphone. It reports any uncaught page exception, which is how the `var history`
-collision that silently killed the whole script was found.
+has no microphone. It then narrows the viewport to 360 by 740 and asserts that the page does
+not scroll sideways, that the grid does, that the partial numbers stay pinned while it
+scrolls, and that every cell is still a 44-pixel tap target. It reports any uncaught page
+exception, which is how the `var history` collision that silently killed the whole
+script was found.
 
 What neither covers: any real horn, any real microphone, any browser but Chrome, and
 whether the thing is pleasant to use.
