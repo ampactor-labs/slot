@@ -5,10 +5,7 @@ with the two independent errors that add up inside each cell. Built for someone 
 into a horn who has been told "low C♯ is sharp, kick the slide" and not told how far,
 or why, or what it costs everywhere else.
 
-**Status: shipping.** Nothing described here is unbuilt. What is missing is a
-measurement: every number comes from tube lengths and none of it has been checked
-against a real horn and a real tuner. See Weak spots for the experiment that would
-settle it.
+**Status: shipping.** Nothing described here is unbuilt. What is missing is a measurement: every number comes from tube lengths and none of it has been checked against a real horn and a real tuner. See Weak spots for the experiment that would settle it.
 
 Open `index.html` in a browser and it runs. No build, no packages, no network. The
 microphone needs a secure origin, so for the listening half:
