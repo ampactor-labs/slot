@@ -116,12 +116,16 @@ beginner's fingering chart and lands the slide throws in the range players are t
 which is encouraging and is not evidence. The experiment that would settle it: put a
 tuner on a King Cleveland 600, play written C♯4 with the slide fully in, and read the
 deviation. The prediction is +55.5 cents against a horn whose valve 3 is cut ideally,
-and less on a horn whose maker already cut it long. Set the cut slider until the page
-agrees with the tuner; that slider position is then a measurement of your horn.
++38.2 at the maker's-compromise cut the page opens on, and less still on a horn whose
+maker already cut it longer than that. Set the cut slider until the page agrees with
+the tuner; that slider position is then a measurement of your horn.
 
-**The ideal cut is not what you own.** Nearly every trumpet built cuts valve 3 long.
-The default here is the mathematically exact cut, chosen because it isolates the
-arithmetic; it makes 1-3 and 1-2-3 look worse than your horn is.
+**The ideal cut is not what you own.** Nearly every trumpet built cuts valve 3 long, so
+the page opens on the *maker's compromise* preset (3.2 semitones) rather than the ideal
+cut — closer to a real horn before anyone has put a tuner on this one. The Measured
+table above is still derived at the ideal cut, because that is the cut that isolates
+the arithmetic; the *Ideal cut* button reproduces it live. Neither preset is your
+horn. The calibration experiment above is what replaces both with a real number.
 
 **Equal temperament is assumed as the target.** A player in a section tunes to the
 section, not to a grid, and will lip the 5th partial somewhere between its pure and

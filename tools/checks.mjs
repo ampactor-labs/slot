@@ -18,9 +18,15 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
     "JSON.stringify(selected)",
     JSON.stringify({ p: 3, si: 6 })
   );
+  // The page opens on the maker's-compromise cut, not the ideal one: nearly
+  // every real horn is cut long, so this is the closer default before you've
+  // calibrated against your own tuner.
+  await check("boots on the maker's compromise, not the ideal cut", "rig.cut3", near(3.2, 1e-9));
+  await evalJS("document.getElementById('pIdeal').click()");
 
   // ── the published numbers ───────────────────────────────────────────────
-  // Every value here is asserted independently by tools/horn-check.mjs.
+  // Every value here is asserted independently by tools/horn-check.mjs, at
+  // the ideal cut set explicitly above regardless of the page's own default.
   await check("open horn is exact", "cell(2,0).cents", near(0, 1e-9));
   await check("1-2 column", "cell(2,3).cents", near(10.63, 0.01));
   await check("2-3 column", "cell(2,4).cents", near(15.53, 0.01));
