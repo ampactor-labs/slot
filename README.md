@@ -92,18 +92,19 @@ icons/                 the app icon as SVG, plus the PNG sizes installs ask for
 tools/horn-check.mjs   the independent derivation, in Node
 tools/checks.mjs       the checks the running page must pass
 tools/cdp.mjs          a headless Chrome driver with no packages, taken from the spiral project
+.github/workflows/      the Pages deploy
 docs/img/              screenshots of the page, rewritten by every run of the page checks
 ```
 
 ## Deploy
 
-The live copy at https://ampactor.dev/slot/ is a copy of this repository's app files kept in the site's repository, [ampactor-labs.github.io](https://github.com/ampactor-labs/ampactor-labs.github.io), under `public/slot/`. That repository deploys to GitHub Pages on every push to its main branch. A change here reaches the live page only when someone copies the new files over the old ones. The app is `index.html`, `manifest.webmanifest`, `sw.js` and the `icons/` folder; without the last three the page still works but cannot be installed or opened offline.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every push to `main`, the same way noodles deploys. It runs `node tools/horn-check.mjs`, copies the app (`index.html`, `manifest.webmanifest`, `sw.js` and `icons/`) into `_site/`, and publishes that to GitHub Pages. Pages serves it at https://ampactor.dev/slot/, because the organization's site at [ampactor-labs.github.io](https://github.com/ampactor-labs/ampactor-labs.github.io) owns the ampactor.dev domain and a repository's Pages site appears under it at the repository's name. There is no build step, and every path in the app is relative, so the same files work from that path, from `localhost`, or from disk.
 
 Installed copies pick up a deploy by themselves. The service worker answers from its cache at once and refreshes the cache from the network behind it, so a new `index.html` shows on the launch after the one that fetched it. It precaches the list of files in `sw.js`; bump `VERSION` there when that list changes.
 
 ## Testing
 
-There is no CI, and both suites run by hand. The first needs only Node:
+The deploy workflow runs the first suite before it publishes, and nothing else runs in CI; the page checks run by hand. The first needs only Node:
 
 ```bash
 node tools/horn-check.mjs
