@@ -71,11 +71,12 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
     0
   );
   // First cell in DOM order is the top-left: partial 8, open.
-  await check("grid reads written by default", "document.querySelector('.cell .note').textContent", "C6");
+  // Concert by default: the names are what the rest of the band hears.
+  await check("grid reads concert by default", "document.querySelector('.cell .note').textContent", "B♭5");
   await evalJS("document.getElementById('tPitch').click()");
-  await check("concert toggle relabels the grid", "document.querySelector('.cell .note').textContent", "B♭5");
+  await check("the toggle relabels the grid written", "document.querySelector('.cell .note').textContent", "C6");
   await evalJS("document.getElementById('tPitch').click()");
-  await check("and back", "document.querySelector('.cell .note').textContent", "C6");
+  await check("and back", "document.querySelector('.cell .note').textContent", "B♭5");
 
   // ── the error layers ────────────────────────────────────────────────────
   await evalJS("document.getElementById('tValve').click()");
@@ -172,6 +173,26 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
   // Off by default, so everything above ran against the full chart.
   await check("the page opens with every note showing", "document.querySelectorAll('.cell.out').length", 0);
   await check("and no staff", "document.getElementById('score').hidden", true);
+
+  // The case the key box is for: someone says "E minor", you pick E minor,
+  // and the staff shows E minor with the valves that make it sound.
+  await evalJS(`(() => { const m = document.getElementById('kMode'); m.value = 'minor'; m.dispatchEvent(new Event('change'));
+     const t = document.getElementById('kTonic');
+     t.value = [...t.options].find(o => o.textContent === 'E').value; t.dispatchEvent(new Event('change')); })()`);
+  await check("concert E minor is the key you hear", "KEY_C.name", "E natural minor");
+  await check("and its staff shows E minor's notes, one sharp",
+    "staffKey().sig.filter(a => a > 0).length + ' ' + [...new Set(scaleNotes().map(o => nameIn(o.midi, true).pc))].sort().join(' ')",
+    "1 A B C D E F♯ G");
+  await check("the E on the staff is fingered as written F♯, and sounds as E",
+    `(() => { const o = scaleNotes().find(o => o.n.deg === 0 && o.midi === 64);
+       return o.c.slot.nm + ' ' + noteName(o.c.concertMidi).pc + noteName(o.c.concertMidi).oct; })()`,
+    "2 E4");
+  await check("the scale it plays is pitched in E",
+    "scaleNotes().every(o => o.c.concertMidi === o.midi)", true);
+  await check("each staff note is named under it", "document.querySelector('#score .nn').textContent", (g) => /^[A-G]/.test(g));
+  await evalJS("setKey(-1, 'major')");
+  // The rest of this section reads written, the pitch the fingerings are charted in.
+  await evalJS("document.getElementById('tPitch').click()");
   await evalJS("(() => { const s = document.getElementById('kTonic'); s.value = '0'; s.dispatchEvent(new Event('change')); })()");
   // Written C major is the seven white keys: count how many of the 49 cells land on one.
   await check(
@@ -220,10 +241,11 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
     "document.getElementById('kTonic').selectedOptions[0].textContent", "B♭");
   await check("and the grid reads concert, spelled by that key",
     "document.querySelector('.cell .note').textContent", "B♭5");
-  await evalJS("document.getElementById('tPitch').click()");
+  await check("and the staff is redrawn in B♭, two flats",
+    "staffKey().name + ' ' + staffKey().sig.filter(a => a < 0).length", "B♭ major 2");
   await check("the scale plays without throwing",
     "(() => { playScale(); const n = scaleVoices.length; playScale(); return n; })()", 29);
-  await evalJS("setKey(2, 'major'); document.getElementById('keyBox').scrollIntoView()");
+  await evalJS("setKey(6, 'minor'); document.getElementById('keyBox').scrollIntoView()");   // concert E minor
   await sleep(200);
   await shot("docs/img/key.png");
   await evalJS("setKey(-1, 'major'); window.scrollTo(0, 0)");

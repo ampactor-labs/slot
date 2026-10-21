@@ -84,6 +84,7 @@ select.pick:focus-visible { outline:2px solid var(--sharp); outline-offset:2px; 
              font-family:ui-monospace,Menlo,Consolas,monospace; }
 .score .ct.pos { fill:var(--sharp); } .score .ct.neg { fill:var(--flat); }
 .score .p7 { font-style:italic; }
+.score .nn { font-size:11px; font-weight:600; fill:var(--ink); text-anchor:middle; }
 
 /* ── the lattice ──────────────────────────────────────────── */
 .scroller { overflow-x:auto; margin:0 -.85rem; padding:0 .85rem; }
@@ -223,7 +224,7 @@ footer { margin-top:1.6rem; font-size:.68rem; color:var(--faint); }
   <button id="tPart" aria-pressed="true">Overtone series</button>
   <button id="tValve" aria-pressed="true">Valve arithmetic</button>
   <span class="lab cond" style="margin-left:.5rem">Read as</span>
-  <button id="tPitch" aria-pressed="false">Concert</button>
+  <button id="tPitch" aria-pressed="true">Concert</button>
 </div>
 
 <div class="scroller">
@@ -378,7 +379,7 @@ var SLOTS = [
 var PARTIALS = [8,7,6,5,4,3,2];         // drawn high to low
 var NAMES = ["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
 
-var rig = { cut3:3.2, pull3:0, pull1:0, showPartial:true, showValve:true, concert:false };
+var rig = { cut3:3.2, pull3:0, pull1:0, showPartial:true, showValve:true, concert:true };
 
 function valveLen(v) {
   if (v === 1) return L_OPEN * (Math.pow(SEMI, 2) - 1) + 2 * rig.pull1;
@@ -617,9 +618,10 @@ function select(p, si, play) {
 /* ══ the key ════════════════════════════════════════════════════════════
    Pick a key and the chart keeps only the cells that belong to it, spelled
    the way the key spells them, and the staff writes the scale out across the
-   whole horn with the fingering under each note. The key is held as a
-   written tonic, because that is what is on the page in front of a trumpet
-   player; "Read as concert" only changes what the menu calls it.            */
+   whole horn with the fingering under each note. "Read as" decides the pitch
+   of all of it: on concert (the default) you pick the key the band calls, and
+   the staff shows the notes you will hear. Internally the key is held as a
+   written tonic, because the fingerings are charted against written notes.  */
 
 var LETTERS = ["C","D","E","F","G","A","B"];
 var LETTER_PC = [0,2,4,5,7,9,11];
@@ -711,15 +713,20 @@ function hornRange() {
   });
   return [lo, hi];
 }
-/* Every note of the scale the horn can play, written, low to high. */
+/* The key the staff is drawn in: what you hear when reading concert, what is
+   on a B♭ part when reading written. */
+function staffKey() { return rig.concert ? KEY_C : KEY_W; }
+/* Every note of the scale the horn can play, low to high, at the pitch the
+   staff is drawn in. `midi` is that pitch; the fingering is looked up by the
+   written note, because that is what the valves are charted against. */
 function scaleNotes() {
   if (!KEY_W) return [];
-  var r = hornRange(), out = [];
-  for (var m = r[0]; m <= r[1]; m++) {
-    var n = keyNote(m, false);
+  var r = hornRange(), out = [], shift = rig.concert ? TRANSPOSE : 0;
+  for (var m = r[0] - shift; m <= r[1] - shift; m++) {
+    var n = keyNote(m, rig.concert);
     if (!n) continue;
     var octave = Math.floor((m - n.alter) / 12) - 1;
-    out.push({ midi:m, n:n, step:n.letter + 7 * octave, c:fingeringFor(m) });
+    out.push({ midi:m, n:n, step:n.letter + 7 * octave, c:fingeringFor(m + shift) });
   }
   return out;
 }
@@ -749,15 +756,23 @@ function keyOptions() {
       "written out below with a fingering under every note.";
     return;
   }
-  var count = KEY_W.sig.filter(function (a) { return a !== 0; }).length;
-  var sharp = KEY_W.sig.some(function (a) { return a > 0; });
-  cap.innerHTML = "Written <b>" + KEY_W.name + "</b>, which sounds as concert <b>" +
-    KEY_C.name + "</b> · " + (count ? count + " " + (sharp ? "sharp" : "flat") +
-    (count > 1 ? "s" : "") : "no sharps or flats") + " · tap a note to hear it";
+  var K = staffKey();
+  var count = K.sig.filter(function (a) { return a !== 0; }).length;
+  var sharp = K.sig.some(function (a) { return a > 0; });
+  var sig = count ? count + " " + (sharp ? "sharp" : "flat") + (count > 1 ? "s" : "")
+                  : "no sharps or flats";
+  // Concert is the default because it is what the rest of the band calls the key:
+  // the staff shows the notes you hear, and the valves under them are what to press.
+  cap.innerHTML = rig.concert
+    ? "<b>" + KEY_C.name + "</b>, the notes as they sound · " + sig +
+      " · press the valves under each note and it comes out in " + KEY_C.name +
+      ". (On a printed B♭ trumpet part this is written " + KEY_W.name + ".)"
+    : "Written <b>" + KEY_W.name + "</b>, as it is printed on a B♭ part · " + sig +
+      " · it sounds as concert " + KEY_C.name + ".";
 }
 
 /* ── the staff ──────────────────────────────────────────────────────────
-   Treble clef at written pitch, whole notes, one bar per line so an
+   Treble clef at the pitch the page is reading (concert unless you switch), whole notes, one bar per line so an
    accidental lasts to the end of the line. Steps count diatonic positions:
    letter + 7 × octave, so E4 (the bottom line) is 30 and F5 (the top) 38. */
 
@@ -798,8 +813,9 @@ function paintScore() {
   if (!notes.length) { scoreEl.innerHTML = ""; return; }
   var W = scoreEl.clientWidth || 340;
   scoreW = W;
-  var sigN = KEY_W.sig.filter(function (a) { return a !== 0; }).length;
-  var sigDir = KEY_W.sig.some(function (a) { return a > 0; }) ? 1 : -1;
+  var K = staffKey();
+  var sigN = K.sig.filter(function (a) { return a !== 0; }).length;
+  var sigDir = K.sig.some(function (a) { return a > 0; }) ? 1 : -1;
   var head = 36 + sigN * 8 + 8, gap = W < 420 ? 30 : 36;
   // as few lines as fit, then shared out evenly so no note is left alone on the last
   var fit = Math.max(4, Math.floor((W - head - 4) / gap));
@@ -813,11 +829,12 @@ function paintScore() {
     var hiY = Math.min.apply(null, line.map(function (o) { return yStep(o.step); }));
     var loY = Math.max.apply(null, line.map(function (o) { return yStep(o.step); }));
     var y0 = Math.min(TOP - 18, hiY - 8);
-    var dotsY = Math.max(TOP + 6 * SP, loY + 14);
+    var nameY = Math.max(TOP + 6 * SP, loY + 16);
+    var dotsY = nameY + 14;
     var H = dotsY + 24 - y0;
     var g = '<svg viewBox="0 ' + y0 + " " + w + " " + H + '" width="' + w + '" height="' + H +
-      '" style="max-width:' + w + 'px" role="group" aria-label="' + KEY_W.name +
-      ', written, notes ' + (start + 1) + " to " + (start + line.length) + '">';
+      '" style="max-width:' + w + 'px" role="group" aria-label="' + K.name +
+      (rig.concert ? ", as it sounds" : ", written") + ', notes ' + (start + 1) + " to " + (start + line.length) + '">';
     for (var i = 0; i < 5; i++)
       g += '<line class="ln" x1="0" x2="' + w + '" y1="' + (TOP + i * SP) + '" y2="' + (TOP + i * SP) + '"/>';
     g += '<path class="clef" d="' + clefPath(4) + '"/>' +
@@ -825,7 +842,7 @@ function paintScore() {
     // the key signature, in the order it is always written
     var sx = 36;
     SIG_ORDER[sigDir].forEach(function (l, k) {
-      if (KEY_W.sig[l] === 0) return;
+      if (K.sig[l] === 0) return;
       g += '<path class="acc" stroke-width="1.5" d="' + accPath(sigDir, sx, yStep(SIG_STEPS[sigDir][k])) + '"/>';
       sx += 8;
     });
@@ -834,23 +851,25 @@ function paintScore() {
     line.forEach(function (o, j) {
       var x = head + j * gap + gap / 2, y = yStep(o.step), c = o.c;
       var sel = c && selected.p === c.p && selected.si === c.si;
-      var nm = nameIn(o.midi, false);
+      var nm = nameIn(o.midi, rig.concert);
       var t = signed(c.cents);
       g += '<g class="sn' + (sel ? " on" : "") + (o.n.deg === 0 ? " tonic" : "") +
         '" tabindex="0" role="button" data-p="' + c.p + '" data-si="' + c.si + '" aria-label="' +
-        "written " + nm.pc + nm.oct + ", valves " + c.slot.nm + ", partial " + c.p + ", " +
+        (rig.concert ? "" : "written ") + nm.pc + nm.oct + ", valves " + c.slot.nm + ", partial " + c.p + ", " +
         t.t + ' cents">' +
         '<rect class="hit" x="' + (x - gap / 2 + 1) + '" y="' + (y0 + 1) + '" width="' + (gap - 2) + '" height="' + (H - 2) + '"/>';
       for (var ls = 40; ls <= o.step; ls += 2)
         g += '<line class="ln" x1="' + (x - 9) + '" x2="' + (x + 9) + '" y1="' + yStep(ls) + '" y2="' + yStep(ls) + '"/>';
       for (ls = 28; ls >= o.step; ls -= 2)
         g += '<line class="ln" x1="' + (x - 9) + '" x2="' + (x + 9) + '" y1="' + yStep(ls) + '" y2="' + yStep(ls) + '"/>';
-      var sk = o.step, cur = sk in state ? state[sk] : KEY_W.sig[o.n.letter];
+      var sk = o.step, cur = sk in state ? state[sk] : K.sig[o.n.letter];
       if (cur !== o.n.alter) {
         g += '<path class="acc" stroke-width="1.4" d="' + accPath(o.n.alter, x - 13, y) + '"/>';
         state[sk] = o.n.alter;
       }
       g += '<ellipse class="head" cx="' + x + '" cy="' + y + '" rx="5.6" ry="3.7" transform="rotate(-18 ' + x + " " + y + ')"/>';
+      // the name, so nobody has to count ledger lines to know what they're playing
+      g += '<text class="nn" x="' + x + '" y="' + nameY + '">' + nm.pc + "</text>";
       // the fingering, drawn like the column heads: three valves, the pressed ones filled
       [1,2,3].forEach(function (v, k) {
         g += '<circle class="vd' + (c.slot.v.indexOf(v) >= 0 ? " on" : "") + '" cx="' + (x - 7.5 + k * 7.5) +
@@ -930,10 +949,13 @@ document.getElementById("tPitch").addEventListener("click", function () {
   rig.concert = !rig.concert;
   this.setAttribute("aria-pressed", String(rig.concert));
   this.textContent = rig.concert ? "Concert" : "Written";
+  try { localStorage.setItem("slot.read", rig.concert ? "concert" : "written"); } catch (e) {}
   keyOptions();
   paint();
 });
-document.getElementById("tPitch").textContent = "Written";
+try { if (localStorage.getItem("slot.read") === "written") rig.concert = false; } catch (e) {}
+document.getElementById("tPitch").textContent = rig.concert ? "Concert" : "Written";
+document.getElementById("tPitch").setAttribute("aria-pressed", String(rig.concert));
 
 function wireSlider(id, key, fmt, out) {
   var el = document.getElementById(id), o = document.getElementById(out);
