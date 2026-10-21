@@ -71,11 +71,12 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
     0
   );
   // First cell in DOM order is the top-left: partial 8, open.
-  await check("grid reads written by default", "document.querySelector('.cell .note').textContent", "C6");
+  // Concert by default: the names are what the rest of the band hears.
+  await check("grid reads concert by default", "document.querySelector('.cell .note').textContent", "B♭5");
   await evalJS("document.getElementById('tPitch').click()");
-  await check("concert toggle relabels the grid", "document.querySelector('.cell .note').textContent", "B♭5");
+  await check("the toggle relabels the grid written", "document.querySelector('.cell .note').textContent", "C6");
   await evalJS("document.getElementById('tPitch').click()");
-  await check("and back", "document.querySelector('.cell .note').textContent", "C6");
+  await check("and back", "document.querySelector('.cell .note').textContent", "B♭5");
 
   // ── the error layers ────────────────────────────────────────────────────
   await evalJS("document.getElementById('tValve').click()");
@@ -168,6 +169,88 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
     [9, 40]
   );
 
+  // ── the key ─────────────────────────────────────────────────────────────
+  // Off by default, so everything above ran against the full chart.
+  await check("the page opens with every note showing", "document.querySelectorAll('.cell.out').length", 0);
+  await check("and no staff", "document.getElementById('score').hidden", true);
+
+  // The case the key box is for: someone says "E minor", you pick E minor,
+  // and the staff shows E minor with the valves that make it sound.
+  await evalJS(`(() => { const m = document.getElementById('kMode'); m.value = 'minor'; m.dispatchEvent(new Event('change'));
+     const t = document.getElementById('kTonic');
+     t.value = [...t.options].find(o => o.textContent === 'E').value; t.dispatchEvent(new Event('change')); })()`);
+  await check("concert E minor is the key you hear", "KEY_C.name", "E natural minor");
+  await check("and its staff shows E minor's notes, one sharp",
+    "staffKey().sig.filter(a => a > 0).length + ' ' + [...new Set(scaleNotes().map(o => nameIn(o.midi, true).pc))].sort().join(' ')",
+    "1 A B C D E F♯ G");
+  await check("the E on the staff is fingered as written F♯, and sounds as E",
+    `(() => { const o = scaleNotes().find(o => o.n.deg === 0 && o.midi === 64);
+       return o.c.slot.nm + ' ' + noteName(o.c.concertMidi).pc + noteName(o.c.concertMidi).oct; })()`,
+    "2 E4");
+  await check("the scale it plays is pitched in E",
+    "scaleNotes().every(o => o.c.concertMidi === o.midi)", true);
+  await check("each staff note is named under it", "document.querySelector('#score .nn').textContent", (g) => /^[A-G]/.test(g));
+  await evalJS("setKey(-1, 'major')");
+  // The rest of this section reads written, the pitch the fingerings are charted in.
+  await evalJS("document.getElementById('tPitch').click()");
+  await evalJS("(() => { const s = document.getElementById('kTonic'); s.value = '0'; s.dispatchEvent(new Event('change')); })()");
+  // Written C major is the seven white keys: count how many of the 49 cells land on one.
+  await check(
+    "C major dims every cell off the white keys",
+    `(() => { let off = 0;
+       for (const p of PARTIALS) for (let i = 0; i < 7; i++)
+         if ([1,3,6,8,10].includes(cell(p, i).writtenMidi % 12)) off++;
+       return document.querySelectorAll('.cell.out').length === off && off > 0; })()`, true);
+  await check("C major on the staff, F♯3 to C6: C4 up to C6 plus the B and A and G below",
+    "scaleNotes().map(o => nameIn(o.midi, false).pc + nameIn(o.midi, false).oct).join(' ')",
+    "G3 A3 B3 C4 D4 E4 F4 G4 A4 B4 C5 D5 E5 F5 G5 A5 B5 C6");
+  await check("one whole note per scale note", "document.querySelectorAll('#score .sn').length", 18);
+  // The staff picks what a method book prints: no partial 7, fewest valves.
+  await check(
+    "the staff fingers the beginner's chart",
+    `scaleNotes().filter(o => [55,57,64,69,72,76,77,81].includes(o.midi))
+       .map(o => nameIn(o.midi,false).pc + nameIn(o.midi,false).oct + ':' + o.c.slot.nm).join(' ')`,
+    "G3:1-3 A3:1-2 E4:1-2 A4:1-2 C5:open E5:open F5:1 A5:1-2");
+  await check("written C major sounds as concert B♭ major", "KEY_C.name", "B♭ major");
+  await check("tonic cells are marked", "document.querySelectorAll('.cell.tonic').length", (g) => g >= 3);
+  await evalJS("document.querySelector('#score .sn').dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+  await check("tapping a staff note selects its cell", "JSON.stringify(selected)", JSON.stringify({ p: 2, si: 5 }));
+
+  // Spelling follows the key, not the chart's default names.
+  await evalJS("setKey(6, 'major')");
+  await check("F♯ major has six sharps and spells E♯",
+    "KEY_W.sig.filter(a => a > 0).length + ' ' + scaleNotes().map(o => nameIn(o.midi,false).pc).includes('E♯')", "6 true");
+  await check("and the grid says E♯ too, not F",
+    "[...document.querySelectorAll('.cell .note')].some(n => n.textContent === 'E♯4')", true);
+  await evalJS("setKey(8, 'harmonic')");
+  await check("G♯ harmonic minor raises its seventh to F𝄪",
+    "scaleNotes().map(o => nameIn(o.midi,false).pc).includes('F𝄪')", true);
+  await evalJS("setKey(0, 'blues')");
+  await check("C blues: C E♭ F G♭ G B♭",
+    "KEY_W.notes.map(n => LETTERS[n.letter] + ACC[n.alter]).join(' ')", "C E♭ F G♭ G B♭");
+  await check("its G after a G♭ gets a natural sign, so the staff draws an accidental for it",
+    "document.querySelectorAll('#score .acc').length > document.querySelectorAll('#score svg').length * 3", true);
+  // B♯ is spelled from B, so it carries B's octave number, not C's.
+  await evalJS("setKey(1, 'harmonic')");
+  await check("C♯ harmonic minor's B♯3 is written B♯3, not B♯4",
+    "(() => { const n = nameIn(60, false); return n.pc + n.oct; })()", "B♯3");
+
+  // Reading in concert renames the menu, and the same entry is the same key.
+  await evalJS("setKey(0, 'major'); document.getElementById('tPitch').click()");
+  await check("in concert the menu names the concert key",
+    "document.getElementById('kTonic').selectedOptions[0].textContent", "B♭");
+  await check("and the grid reads concert, spelled by that key",
+    "document.querySelector('.cell .note').textContent", "B♭5");
+  await check("and the staff is redrawn in B♭, two flats",
+    "staffKey().name + ' ' + staffKey().sig.filter(a => a < 0).length", "B♭ major 2");
+  await check("the scale plays without throwing",
+    "(() => { playScale(); const n = scaleVoices.length; playScale(); return n; })()", 29);
+  await evalJS("setKey(6, 'minor'); document.getElementById('keyBox').scrollIntoView()");   // concert E minor
+  await sleep(200);
+  await shot("docs/img/key.png");
+  await evalJS("setKey(-1, 'major'); window.scrollTo(0, 0)");
+  await check("every note again", "document.querySelectorAll('.cell.out').length", 0);
+
   // ── the narrow case ─────────────────────────────────────────────────────
   // The lattice is wider than a phone on purpose and scrolls inside its own
   // box. The page around it must not.
@@ -201,4 +284,26 @@ export async function run({ check, evalJS, sleep, shot, emulate, viewport }) {
   await emulate([{ name: "prefers-color-scheme", value: "dark" }]);
   await sleep(250);
   await shot("docs/img/lattice-dark.png");
+
+  // ── installable, offline ────────────────────────────────────────────────
+  // Last, because the worker it waits for has been installing all along.
+  await check("the manifest is linked and parses",
+    `fetch(document.querySelector('link[rel=manifest]').href).then(r => r.json())
+       .then(m => m.short_name + ' ' + m.display + ' ' + m.icons.length)`,
+    "slot standalone 4", { awaitPromise: true });
+  await check("a service worker takes the page",
+    `Promise.race([navigator.serviceWorker.ready.then(r => !!r.active),
+                   new Promise(r => setTimeout(() => r('timed out'), 5000))])`,
+    true, { awaitPromise: true });
+  await check("everything the page needs is in its cache",
+    `caches.keys().then(ks => caches.open(ks[0])).then(c =>
+       Promise.all(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg',
+                    'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png',
+                    'icons/apple-touch-icon.png'].map(u => c.match(u))))
+       .then(hits => hits.every(Boolean))`,
+    true, { awaitPromise: true });
+  await evalJS("location.reload()");
+  await sleep(1200);
+  await check("after a reload the worker serves the page", "!!navigator.serviceWorker.controller", true);
+  await check("and the chart still builds", "document.querySelectorAll('.cell').length", 49);
 }

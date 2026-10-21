@@ -1,12 +1,12 @@
 # slot
 
-An interactive chart of B♭ trumpet fingerings that shows how sharp or flat each note plays and how far to pull a valve slide to fix the worst ones. Its 49 cells cross seven fingerings (the valves held down) with seven natural overtones, and a cell's error is the fingering's plus the overtone's. It is for a beginner who was told "low C♯ is sharp, kick the slide" and not how far or why. It is one dependency-free HTML file that plays each cell and listens through the microphone.
+An interactive chart of B♭ trumpet fingerings that shows how sharp or flat each note plays and how far to pull a valve slide to fix the worst ones. Its 49 cells cross seven fingerings (the valves held down) with seven natural overtones, and a cell's error is the fingering's plus the overtone's. It is for a beginner who was told "low C♯ is sharp, kick the slide" and not how far or why. It is one dependency-free HTML file that plays each cell, listens through the microphone, writes out the scale for any key with its fingerings, and installs as an app that works offline.
 
 **Status: working.** Every figure on the chart comes from a model of the horn, and no one has checked them against a real horn with a tuner yet.
 
 Live: https://ampactor.dev/slot/
 
-![The chart in the light theme at the ideal valve-3 cut, with written C♯4 selected](docs/img/lattice-light.png)
+![The chart in the light theme at the ideal valve-3 cut, with written C♯4 (concert B3) selected](docs/img/lattice-light.png)
 
 ## Quick start
 
@@ -20,9 +20,15 @@ python3 -m http.server 8000    # then open http://localhost:8000
 
 The live copy at https://ampactor.dev/slot/ uses HTTPS, which also counts.
 
+**Install it.** Served over HTTPS or `localhost`, the page is a PWA (progressive web app, a site the browser can install). On Android Chrome use *Install app* or *Add to Home screen*; on iPhone Safari use *Share → Add to Home Screen*; on desktop Chrome or Edge use the install icon in the address bar. The first visit caches the page and its icons, so the installed copy opens with no network, including the key and the staff. The microphone still needs a secure origin, which an installed copy is.
+
 ## Usage
 
-The page does three jobs, and a panel of controls sets up the horn it models.
+The page does four jobs, and a panel of controls sets up the horn it models.
+
+**Play in a key.** When a guitarist says "E minor", pick E and *natural minor* in the *Key* box at the top. The page reads concert pitch by default, which is what the rest of the band hears, so the staff shows E minor's own notes (E F♯ G A B C D, one sharp), and you never do the B♭ transposition yourself. Each note on the staff has its name, the valves to press, and how many cents that fingering plays off. Press those valves and the horn sounds E minor; *Play the scale* plays it from the lowest E to the highest and back, and tapping a note plays it and selects its cell. The fingering is the one a method book prints: the fewest valves, and partial 7 only when nothing else reaches the note. The chart dims every cell outside the key (they stay tappable), underlines the tonic, and spells notes the key's way, so F♯ major shows E♯ rather than F. The scales are major, natural minor, harmonic minor, major and minor pentatonic, and blues. Switch *Read as* to written when you're reading a printed B♭ trumpet part: the menu, the staff and the chart all move to written pitch together, so concert E minor becomes written F♯ minor, two sharps. The page remembers the key and the *Read as* setting in that browser.
+
+![Concert E minor on the staff with the valves under each note, and the chart dimmed to the notes of the key](docs/img/key.png)
 
 **Read the map.** Each column is a fingering, running from open (the shortest tube) to all three valves down (the longest). The page and its code call a column a slot. Each row is a partial. The lips pick one of the natural overtones of whatever tube the valves make, and partial n vibrates at n times that tube's lowest frequency; together the partials form the harmonic series. Each cell is one note, named as written for B♭ trumpet, which is a whole step above the concert pitch that sounds (C4 is middle C). Under the name is the note's error in cents against 12-tone equal temperament. That is the standard tuning, with 12 equal semitones to the octave and the A above middle C at 440 Hz (A440). A cent is a hundredth of a semitone. Color shows the error, blue for flat and orange for sharp. The printed number and a bar at the foot of each cell repeat it, and the bar reaches the cell's edge at ±50 cents, so color is never the only channel. Tap a cell to hear what that fingering produces.
 
@@ -30,7 +36,7 @@ The page does three jobs, and a panel of controls sets up the horn it models.
 
 **Check yourself against it.** Press *Listen* and play. The page names the partial and the slot you landed on. It shows how far you are from where the tube sits and from the tempered note. It also lights the matching cell, and a needle shows the distance from the tempered note. For long tones it adds a steadiness figure, the spread of your pitch over the last second and a half. The ear always measures against the full model with both errors on, whatever the display toggles are set to.
 
-**The rig.** Sliders pull the third-valve slide out by up to 40 mm and the first-valve slide by up to 20 mm. A third slider sets how long valve 3's tubing is cut, measured as how many semitones it lowers the open horn, from 3.00 to 3.40. A cut of 3.00 is the ideal cut, and the page opens on the longer *Maker's compromise* preset of 3.20 (Limitations explains why). The other presets restore the ideal cut or push both slides back in. Two toggles turn the overtone error and the valve error off independently, and *Read as* switches the note names between written and concert pitch.
+**The rig.** Sliders pull the third-valve slide out by up to 40 mm and the first-valve slide by up to 20 mm. A third slider sets how long valve 3's tubing is cut, measured as how many semitones it lowers the open horn, from 3.00 to 3.40. A cut of 3.00 is the ideal cut, and the page opens on the longer *Maker's compromise* preset of 3.20 (Limitations explains why). The other presets restore the ideal cut or push both slides back in. Two toggles turn the overtone error and the valve error off independently, and *Read as* switches the note names, the key menu and the staff between concert pitch (the default) and written pitch.
 
 ## How it works
 
@@ -79,20 +85,26 @@ Each note plays through a small Web Audio synth: an oscillator with a custom wav
 ## Project layout
 
 ```
-index.html             the whole app: model, grid, sound and pitch detection
+index.html             the whole app: model, grid, key and staff, sound and pitch detection
+manifest.webmanifest   the install manifest: name, colors, icons
+sw.js                  the service worker that caches the app for offline use
+icons/                 the app icon as SVG, plus the PNG sizes installs ask for
 tools/horn-check.mjs   the independent derivation, in Node
 tools/checks.mjs       the checks the running page must pass
 tools/cdp.mjs          a headless Chrome driver with no packages, taken from the spiral project
+.github/workflows/      the Pages deploy
 docs/img/              screenshots of the page, rewritten by every run of the page checks
 ```
 
 ## Deploy
 
-The live copy at https://ampactor.dev/slot/ is a copy of `index.html` kept in the site's repository, [ampactor-labs.github.io](https://github.com/ampactor-labs/ampactor-labs.github.io), at `public/slot/index.html`. That repository deploys to GitHub Pages on every push to its main branch. A change here reaches the live page only when someone copies the new `index.html` over that file.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every push to `main`, the same way noodles deploys. It runs `node tools/horn-check.mjs`, copies the app (`index.html`, `manifest.webmanifest`, `sw.js` and `icons/`) into `_site/`, and publishes that to GitHub Pages. Pages serves it at https://ampactor.dev/slot/, because the organization's site at [ampactor-labs.github.io](https://github.com/ampactor-labs/ampactor-labs.github.io) owns the ampactor.dev domain and a repository's Pages site appears under it at the repository's name. There is no build step, and every path in the app is relative, so the same files work from that path, from `localhost`, or from disk.
+
+Installed copies pick up a deploy by themselves. The service worker answers from its cache at once and refreshes the cache from the network behind it, so a new `index.html` shows on the launch after the one that fetched it. It precaches the list of files in `sw.js`; bump `VERSION` there when that list changes.
 
 ## Testing
 
-There is no CI, and both suites run by hand. The first needs only Node:
+The deploy workflow runs the first suite before it publishes, and nothing else runs in CI; the page checks run by hand. The first needs only Node:
 
 ```bash
 node tools/horn-check.mjs
@@ -106,9 +118,9 @@ The second suite drives headless Chrome through the DevTools protocol. It needs 
 node tools/cdp.mjs http://localhost:8000/index.html $PWD/tools/checks.mjs
 ```
 
-It runs 56 checks in the live page. They check that the grid has 49 cells, that the page opens on the maker's-compromise cut, and that the published figures hold at the ideal cut. Others check that each toggle zeroes the layer it names, that written pitch sits two semitones above concert in every cell, and that the slide corrects the note it is pulled for and detunes the fingering it shares. The audio graph has to build, with sound muted. Headless Chrome has no microphone, so the suite feeds synthetic tones straight into `detect()`: a low C, a high C, a tone with its fundamental removed, silence, and noise. It then narrows the viewport to 360 by 740 pixels. There it checks that the page does not scroll sideways, that the grid does, that the partial numbers stay pinned while the grid scrolls, and that every cell is still at least 44 pixels tall. Any uncaught page exception fails the run, which is how a `var history` collision that had silently stopped the whole script was found. The run also rewrites the three screenshots in `docs/img/`.
+It runs 86 checks in the live page. They check that the grid has 49 cells, that the page opens on the maker's-compromise cut, and that the published figures hold at the ideal cut. Others check that each toggle zeroes the layer it names, that the grid reads concert by default, that written pitch sits two semitones above concert in every cell, and that the slide corrects the note it is pulled for and detunes the fingering it shares. The audio graph has to build, with sound muted. Headless Chrome has no microphone, so the suite feeds synthetic tones straight into `detect()`: a low C, a high C, a tone with its fundamental removed, silence, and noise. It then narrows the viewport to 360 by 740 pixels. There it checks that the page does not scroll sideways, that the grid does, that the partial numbers stay pinned while the grid scrolls, and that every cell is still at least 44 pixels tall. The key checks pick concert E minor and assert that the staff shows E minor's notes with its one sharp, that the E is fingered as written F♯ (valve 2), and that every note it plays sounds at the pitch the staff shows. They then pick written C major and assert which cells dim, the 18 notes on the staff, the fingerings it prints, and that tapping a note selects its cell. They check spellings that only come out right if the key spells them: E♯ in F♯ major, F𝄪 in G♯ harmonic minor, B♯3 rather than B♯4, and the natural sign the blues scale needs. The last checks assert that the manifest parses, that a service worker takes the page, that every file it needs is in its cache, and that the page still builds after a reload through the worker. Any uncaught page exception fails the run, which is how a `var history` collision that had silently stopped the whole script was found. The run also rewrites the four screenshots in `docs/img/`.
 
-Neither suite covers a real horn, a real microphone, any browser other than Chrome, or whether the page is pleasant to use.
+Neither suite covers a real horn, a real microphone, any browser other than Chrome, installing to a real phone, or whether the page is pleasant to use.
 
 ## Limitations
 
@@ -118,6 +130,7 @@ Neither suite covers a real horn, a real microphone, any browser other than Chro
 - **Equal temperament is the only target.** A player in a section tunes to the other players and bends the 5th partial with the lips to somewhere between its pure and tempered positions, depending on the chord. Every deviation printed here is against 12-tone equal temperament at A440 and says nothing about what is musically right.
 - **The microphone measures pitch and nothing else.** It cannot tell a beautiful note from a dead one at the same frequency. It listens only between about 140 Hz and 1150 Hz, which covers the chart and leaves out the pedal tones below partial 2.
 - **The slide advice is wrong for flat notes.** For a flat fingering that uses valve 3, such as partial 7 on 2-3, the panel says "Already true with the slide where it is." Pulling the slide only lengthens the tube, which lowers the note, so it cannot fix a flat one.
+- **The staff shows one fingering per note.** It prints the standard one, never the alternates a player reaches for to fix intonation or speed up a passage, and it leaves out valve 3 alone, which the model doesn't have. Every alternate is still in the chart, and in a key the chart keeps them all.
 - **Partial 7 is on the chart and should not be played.** Method books tell players to avoid it, so the page draws it dashed. It stays because the table is incomplete without it.
 - **The model is a generic horn.** It treats the horn's resonances as exact harmonics, which real horns only approximate, and the width and flare of a real horn's tubing shift the right slide positions by millimeters. It ignores air temperature, which also moves a real horn's pitch, and it leaves out the valve-3-alone fingering.
 

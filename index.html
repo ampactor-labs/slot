@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>slot — the trumpet as a lookup table</title>
 <meta name="description" content="Every note a trumpet can play, and the two errors that add up in each one.">
+<!-- Installable and offline: sw.js caches this page and its icons on first visit. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#ece9e2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101114" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="slot">
 <style>
 :root {
   --paper:#ece9e2; --ink:#16181c; --rule:#16181c; --faint:#6b6f78; --wash:#e2ded4;
@@ -49,6 +57,35 @@ button:focus-visible { outline:2px solid var(--sharp); outline-offset:2px; }
 button:disabled { opacity:.4; cursor:default; }
 button.wide { flex:1 1 auto; }
 
+/* ── the key ──────────────────────────────────────────────── */
+.key { border:2px solid var(--rule); margin-top:1rem; padding:.6rem .7rem .55rem; }
+select.pick {
+  font:inherit; font-size:.8rem; color:var(--ink); background:var(--paper);
+  border:1.5px solid var(--rule); border-radius:0; padding:.36rem .4rem; min-height:2.1rem;
+}
+select.pick:focus-visible { outline:2px solid var(--sharp); outline-offset:2px; }
+.kcap { font-size:.72rem; color:var(--faint); margin:.45rem 0 0; }
+.kcap b { color:var(--ink); font-weight:600; }
+.score { margin-top:.35rem; }
+.score svg { display:block; width:100%; overflow:visible; }
+.score .ln { stroke:var(--ink); stroke-width:1; }
+.score .clef, .score .acc { fill:none; stroke:var(--ink); stroke-linecap:round; }
+.score .clef { stroke-width:1.7; }
+.score .dot { fill:var(--ink); }
+.score .head { fill:none; stroke:var(--ink); stroke-width:2; }
+.score .sn { cursor:pointer; outline:none; }
+.score .sn .hit { fill:transparent; }
+.score .sn:hover .hit, .score .sn:focus-visible .hit { fill:var(--wash); }
+.score .sn.on .hit { fill:var(--wash); stroke:var(--ink); stroke-width:1.5; }
+.score .sn.tonic .head { stroke-width:3; }
+.score .vd { fill:none; stroke:var(--ink); stroke-width:1.2; }
+.score .vd.on { fill:var(--ink); }
+.score .ct { font-size:9px; fill:var(--faint); text-anchor:middle;
+             font-family:ui-monospace,Menlo,Consolas,monospace; }
+.score .ct.pos { fill:var(--sharp); } .score .ct.neg { fill:var(--flat); }
+.score .p7 { font-style:italic; }
+.score .nn { font-size:11px; font-weight:600; fill:var(--ink); text-anchor:middle; }
+
 /* ── the lattice ──────────────────────────────────────────── */
 .scroller { overflow-x:auto; margin:0 -.85rem; padding:0 .85rem; }
 .lattice { display:grid; grid-template-columns:2.1rem repeat(7,minmax(3.3rem,1fr));
@@ -90,7 +127,13 @@ button.wide { flex:1 1 auto; }
                    width:1px; background:var(--faint); opacity:.6; }
 .cell.lit { background:var(--ink); }
 .cell.lit .note, .cell.lit .dev, .cell.lit .oct { color:var(--paper); }
+.cell.lit > * { opacity:1; }
 .cell.row7 { border-style:dashed; }
+/* out of the chosen key: still there, still tappable, but out of the way */
+.cell.out { background:transparent; border-style:dotted; }
+.cell.out > * { opacity:.22; }
+.cell.tonic .note { text-decoration:underline; text-underline-offset:.18em;
+                    text-decoration-thickness:2px; }
 .cell.row7 .note { opacity:.62; font-style:italic; }
 .rowhead.r7 { font-style:italic; }
 .legend { display:flex; gap:.9rem; flex-wrap:wrap; margin:.5rem 0 0; font-size:.66rem;
@@ -164,12 +207,24 @@ footer { margin-top:1.6rem; font-size:.68rem; color:var(--faint); }
   reasons.</p>
 </header>
 
+<section class="key" id="keyBox">
+  <div class="bar" style="margin:0">
+    <label class="lab cond" for="kTonic">Key</label>
+    <select id="kTonic" class="pick"></select>
+    <select id="kMode" class="pick" aria-label="Scale"></select>
+    <button id="kPlay" disabled>Play the scale</button>
+  </div>
+  <p class="kcap" id="kCap">Pick a key and the chart keeps only its notes, and the
+    scale is written out below with a fingering under every note.</p>
+  <div class="score" id="score" hidden></div>
+</section>
+
 <div class="bar">
   <span class="lab cond">Errors</span>
   <button id="tPart" aria-pressed="true">Overtone series</button>
   <button id="tValve" aria-pressed="true">Valve arithmetic</button>
   <span class="lab cond" style="margin-left:.5rem">Read as</span>
-  <button id="tPitch" aria-pressed="false">Concert</button>
+  <button id="tPitch" aria-pressed="true">Concert</button>
 </div>
 
 <div class="scroller">
@@ -324,7 +379,7 @@ var SLOTS = [
 var PARTIALS = [8,7,6,5,4,3,2];         // drawn high to low
 var NAMES = ["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
 
-var rig = { cut3:3.2, pull3:0, pull1:0, showPartial:true, showValve:true, concert:false };
+var rig = { cut3:3.2, pull3:0, pull1:0, showPartial:true, showValve:true, concert:true };
 
 function valveLen(v) {
   if (v === 1) return L_OPEN * (Math.pow(SEMI, 2) - 1) + 2 * rig.pull1;
@@ -478,23 +533,26 @@ function paint() {
     SLOTS.forEach(function (slot, si) {
       var c = cell(p, si), el = cellEls[p + ":" + si];
       var m = rig.concert ? c.concertMidi : c.writtenMidi;
-      var n = noteName(m);
+      var n = nameIn(m, rig.concert);
       el.querySelector(".note").innerHTML = n.pc + '<span class="oct">' + n.oct + "</span>";
       var d = c.cents;
       el.querySelector(".dev").textContent =
         (Math.abs(d) < .05 ? "0" : (d > 0 ? "+" : "−") + Math.abs(d).toFixed(1));
       el.className = "cell" + (p === 7 ? " row7" : "") +
                      (Math.abs(d) < .05 ? "" : d > 0 ? " sharp" : " flat") +
+                     (inKey(c.writtenMidi) ? "" : " out") +
+                     (isTonic(c.writtenMidi) ? " tonic" : "") +
                      (el === litEl ? " lit" : "");
       el.querySelector(".dv b").style.width = Math.min(50, Math.abs(d)) + "%";
       el.setAttribute("aria-pressed", (selected.p === p && selected.si === si) ? "true" : "false");
-      var w = noteName(c.writtenMidi);
+      var w = nameIn(c.writtenMidi, false);
       el.setAttribute("aria-label",
-        "written " + w.pc + w.oct + ", partial " + p + ", valves " + slot.nm +
+        "written " + w.pc + w.oct + (inKey(c.writtenMidi) ? "" : ", not in the key") + ", partial " + p + ", valves " + slot.nm +
         ", " + d.toFixed(1) + " cents");
     });
   });
   paintInspector();
+  paintScore();
 }
 
 /* ══ inspector ══════════════════════════════════════════════════════════ */
@@ -505,7 +563,7 @@ function signed(x) {
 }
 function paintInspector() {
   var c = cell(selected.p, selected.si);
-  var w = noteName(c.writtenMidi), cn = noteName(c.concertMidi);
+  var w = nameIn(c.writtenMidi, false), cn = nameIn(c.concertMidi, true);
   document.getElementById("iName").textContent =
     (rig.concert ? cn.pc + cn.oct : w.pc + w.oct);
   document.getElementById("iAlt").textContent =
@@ -557,6 +615,324 @@ function select(p, si, play) {
   if (play) blow(cell(p, si).actualHz, audio().currentTime + .01, .9);
 }
 
+/* ══ the key ════════════════════════════════════════════════════════════
+   Pick a key and the chart keeps only the cells that belong to it, spelled
+   the way the key spells them, and the staff writes the scale out across the
+   whole horn with the fingering under each note. "Read as" decides the pitch
+   of all of it: on concert (the default) you pick the key the band calls, and
+   the staff shows the notes you will hear. Internally the key is held as a
+   written tonic, because the fingerings are charted against written notes.  */
+
+var LETTERS = ["C","D","E","F","G","A","B"];
+var LETTER_PC = [0,2,4,5,7,9,11];
+var ACC = { "-2":"𝄫", "-1":"♭", "0":"", "1":"♯", "2":"𝄪" };
+// The usual spelling of each tonic, as [letter, alteration]: D♭ major but C♯ minor.
+var TONIC = {
+  maj:[[0,0],[1,-1],[1,0],[2,-1],[2,0],[3,0],[3,1],[4,0],[5,-1],[5,0],[6,-1],[6,0]],
+  min:[[0,0],[0,1],[1,0],[2,-1],[2,0],[3,0],[3,1],[4,0],[4,1],[5,0],[6,-1],[6,0]]
+};
+var PARENT = { maj:[0,2,4,5,7,9,11], min:[0,2,3,5,7,8,10] };
+// Each scale is degrees of its parent (0 = the tonic), with an alteration
+// against the key signature where it has one.
+var MODES = [
+  { id:"major",    nm:"major",            parent:"maj", degs:[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0]] },
+  { id:"minor",    nm:"natural minor",    parent:"min", degs:[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0]] },
+  { id:"harmonic", nm:"harmonic minor",   parent:"min", degs:[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,1]] },
+  { id:"majpent",  nm:"major pentatonic", parent:"maj", degs:[[0,0],[1,0],[2,0],[4,0],[5,0]] },
+  { id:"minpent",  nm:"minor pentatonic", parent:"min", degs:[[0,0],[2,0],[3,0],[4,0],[6,0]] },
+  { id:"blues",    nm:"blues",            parent:"min", degs:[[0,0],[2,0],[3,0],[4,-1],[4,0],[6,0]] }
+];
+function modeById(id) { return MODES.filter(function (m) { return m.id === id; })[0] || MODES[0]; }
+
+var key = { tonic:-1, mode:"major" };    // tonic: written pitch class, -1 for every note
+var KEY_W = null, KEY_C = null;           // the scale spelled written and concert
+
+function wrap(d) { return ((d % 12) + 18) % 12 - 6; }      // into -6..5
+function spellKey(tonicPc, modeId) {
+  var M = modeById(modeId), t = TONIC[M.parent][tonicPc], steps = PARENT[M.parent];
+  var sig = [];
+  for (var k = 0; k < 7; k++) {
+    var l = (t[0] + k) % 7;
+    sig[l] = wrap((tonicPc + steps[k]) - LETTER_PC[l]);
+  }
+  var notes = M.degs.map(function (d) {
+    var l = (t[0] + d[0]) % 7, alt = sig[l] + d[1];
+    return { deg:d[0], letter:l, alter:alt, pc:((LETTER_PC[l] + alt) % 12 + 12) % 12 };
+  });
+  return { tonicPc:tonicPc, mode:M, sig:sig, notes:notes,
+           name:LETTERS[t[0]] + ACC[t[1]] + " " + M.nm };
+}
+function setKey(tonic, modeId) {
+  key.tonic = tonic; key.mode = modeById(modeId).id;
+  KEY_W = tonic < 0 ? null : spellKey(tonic, key.mode);
+  KEY_C = tonic < 0 ? null : spellKey((tonic + 12 - TRANSPOSE) % 12, key.mode);
+  try { localStorage.setItem("slot.key", JSON.stringify(key)); } catch (e) {}
+  keyOptions();
+  paint();
+}
+function keyNote(m, concert) {
+  var K = concert ? KEY_C : KEY_W;
+  if (!K) return null;
+  var pc = ((m % 12) + 12) % 12;
+  return K.notes.filter(function (n) { return n.pc === pc; })[0] || null;
+}
+function inKey(writtenMidi) { return !KEY_W || keyNote(writtenMidi, false) !== null; }
+function isTonic(writtenMidi) {
+  return !!KEY_W && ((writtenMidi % 12) + 12) % 12 === KEY_W.tonicPc;
+}
+/* A note's name, spelled by the key when it is in one (E♯, not F, in F♯
+   major), else the chart's default spelling. B♯ and C♭ cross the octave
+   number, which belongs to the letter, not the pitch. */
+function nameIn(m, concert) {
+  var n = keyNote(m, concert);
+  if (!n) return noteName(m);
+  return { pc:LETTERS[n.letter] + ACC[n.alter], oct:Math.floor((m - n.alter) / 12) - 1 };
+}
+/* The fingering a method book prints for a written note: partial 7 only as a
+   last resort, then the fewest valves down. Walking the model this way gives
+   the standard chart, so the staff never needs a table of its own. */
+function fingeringFor(writtenMidi) {
+  var best = null, bestRank = Infinity;
+  PARTIALS.forEach(function (p) {
+    SLOTS.forEach(function (slot, si) {
+      var c = cell(p, si);
+      if (c.writtenMidi !== writtenMidi) return;
+      var rank = (p === 7 ? 100 : 0) + slot.v.length * 10 + p * .01;
+      if (rank < bestRank) { bestRank = rank; best = c; }
+    });
+  });
+  return best;
+}
+function hornRange() {
+  var lo = Infinity, hi = -Infinity;
+  PARTIALS.forEach(function (p) {
+    SLOTS.forEach(function (slot, si) {
+      var m = cell(p, si).writtenMidi;
+      lo = Math.min(lo, m); hi = Math.max(hi, m);
+    });
+  });
+  return [lo, hi];
+}
+/* The key the staff is drawn in: what you hear when reading concert, what is
+   on a B♭ part when reading written. */
+function staffKey() { return rig.concert ? KEY_C : KEY_W; }
+/* Every note of the scale the horn can play, low to high, at the pitch the
+   staff is drawn in. `midi` is that pitch; the fingering is looked up by the
+   written note, because that is what the valves are charted against. */
+function scaleNotes() {
+  if (!KEY_W) return [];
+  var r = hornRange(), out = [], shift = rig.concert ? TRANSPOSE : 0;
+  for (var m = r[0] - shift; m <= r[1] - shift; m++) {
+    var n = keyNote(m, rig.concert);
+    if (!n) continue;
+    var octave = Math.floor((m - n.alter) / 12) - 1;
+    out.push({ midi:m, n:n, step:n.letter + 7 * octave, c:fingeringFor(m + shift) });
+  }
+  return out;
+}
+
+function keyOptions() {
+  var tSel = document.getElementById("kTonic"), mSel = document.getElementById("kMode");
+  var M = modeById(key.mode), shift = rig.concert ? TRANSPOSE : 0;
+  if (!mSel.options.length) {
+    MODES.forEach(function (m) { mSel.add(new Option(m.nm, m.id)); });
+  }
+  mSel.value = key.mode;
+  tSel.innerHTML = "";
+  tSel.add(new Option("every note", "-1"));
+  // The menu runs C to B in whichever pitch it is reading, and each entry
+  // stands for the written tonic that sounds as that.
+  for (var pc = 0; pc < 12; pc++) {
+    var t = TONIC[M.parent][pc];
+    tSel.add(new Option(LETTERS[t[0]] + ACC[t[1]], String((pc + shift) % 12)));
+  }
+  tSel.value = String(key.tonic);
+  tSel.setAttribute("aria-label", rig.concert ? "Key, concert pitch" : "Key, written pitch");
+  document.getElementById("kPlay").disabled = !KEY_W;
+
+  var cap = document.getElementById("kCap");
+  if (!KEY_W) {
+    cap.innerHTML = "Pick a key and the chart keeps only its notes, and the scale is " +
+      "written out below with a fingering under every note.";
+    return;
+  }
+  var K = staffKey();
+  var count = K.sig.filter(function (a) { return a !== 0; }).length;
+  var sharp = K.sig.some(function (a) { return a > 0; });
+  var sig = count ? count + " " + (sharp ? "sharp" : "flat") + (count > 1 ? "s" : "")
+                  : "no sharps or flats";
+  // Concert is the default because it is what the rest of the band calls the key:
+  // the staff shows the notes you hear, and the valves under them are what to press.
+  cap.innerHTML = rig.concert
+    ? "<b>" + KEY_C.name + "</b>, the notes as they sound · " + sig +
+      " · press the valves under each note and it comes out in " + KEY_C.name +
+      ". (On a printed B♭ trumpet part this is written " + KEY_W.name + ".)"
+    : "Written <b>" + KEY_W.name + "</b>, as it is printed on a B♭ part · " + sig +
+      " · it sounds as concert " + KEY_C.name + ".";
+}
+
+/* ── the staff ──────────────────────────────────────────────────────────
+   Treble clef at the pitch the page is reading (concert unless you switch), whole notes, one bar per line so an
+   accidental lasts to the end of the line. Steps count diatonic positions:
+   letter + 7 × octave, so E4 (the bottom line) is 30 and F5 (the top) 38. */
+
+var SP = 9;                                     // staff space, px
+var TOP = 30;                                   // y of the top line
+function yStep(step) { return TOP + (38 - step) * SP / 2; }
+var SIG_STEPS = { 1:[38,35,39,36,33,37,34], "-1":[34,37,33,36,32,35,31] };
+var SIG_ORDER = { 1:[3,0,4,1,5,2,6], "-1":[6,2,5,1,4,0,3] };   // F C G D A E B, and back
+
+function accPath(alt, x, y) {
+  if (alt === 1) return "M" + (x-2) + " " + (y-7) + "v15M" + (x+2) + " " + (y-8) + "v15" +
+    "M" + (x-4.5) + " " + (y-1.2) + "l9 -2.6M" + (x-4.5) + " " + (y+3.8) + "l9 -2.6";
+  if (alt === -1) return "M" + (x-3) + " " + (y-12) + "V" + (y+4) +
+    "C" + (x+5) + " " + (y-1) + " " + (x+4) + " " + (y-6) + " " + (x-3) + " " + (y-2);
+  if (alt === 0) return "M" + (x-2.5) + " " + (y-9) + "V" + (y+4) + "l5 -1.5" +
+    "M" + (x+2.5) + " " + (y+9) + "V" + (y-4) + "l-5 1.5";
+  if (alt === 2) return "M" + (x-3) + " " + (y-3) + "l6 6M" + (x+3) + " " + (y-3) + "l-6 6";
+  return accPath(-1, x - 3.5, y) + accPath(-1, x + 3.5, y);          // double flat
+}
+// A G clef, stroked: the curl sits on the G line (y = TOP + 3 spaces).
+function clefPath(x) {
+  var g = TOP + 3 * SP, s = SP / 8;
+  function P(dx, dy) { return (x + dx * s).toFixed(1) + " " + (g + dy * s).toFixed(1); }
+  return "M" + P(11, 1) + "C" + P(7, 1) + " " + P(6, -4) + " " + P(10, -6) +
+    "C" + P(15, -8) + " " + P(19, -2) + " " + P(16, 3) +
+    "C" + P(13, 8) + " " + P(3, 7) + " " + P(2, 0) +
+    "C" + P(1, -8) + " " + P(10, -14) + " " + P(14, -21) +
+    "C" + P(17, -27) + " " + P(17, -35) + " " + P(13, -37) +
+    "C" + P(9, -38) + " " + P(8, -29) + " " + P(10, -22) +
+    "L" + P(14, 15) + "C" + P(15, 21) + " " + P(9, 22) + " " + P(7, 18);
+}
+
+var scoreEl = document.getElementById("score");
+var scoreW = 0;
+function paintScore() {
+  var notes = scaleNotes();
+  scoreEl.hidden = !notes.length;
+  if (!notes.length) { scoreEl.innerHTML = ""; return; }
+  var W = scoreEl.clientWidth || 340;
+  scoreW = W;
+  var K = staffKey();
+  var sigN = K.sig.filter(function (a) { return a !== 0; }).length;
+  var sigDir = K.sig.some(function (a) { return a > 0; }) ? 1 : -1;
+  var head = 36 + sigN * 8 + 8, gap = W < 420 ? 30 : 36;
+  // as few lines as fit, then shared out evenly so no note is left alone on the last
+  var fit = Math.max(4, Math.floor((W - head - 4) / gap));
+  var lines = Math.ceil(notes.length / fit), perLine = Math.ceil(notes.length / lines);
+  var html = "";
+
+  for (var start = 0; start < notes.length; start += perLine) {
+    var line = notes.slice(start, start + perLine);
+    var w = head + line.length * gap + 4;
+    // each line is only as tall as its own ledger lines need; the clef sets the floor
+    var hiY = Math.min.apply(null, line.map(function (o) { return yStep(o.step); }));
+    var loY = Math.max.apply(null, line.map(function (o) { return yStep(o.step); }));
+    var y0 = Math.min(TOP - 18, hiY - 8);
+    var nameY = Math.max(TOP + 6 * SP, loY + 16);
+    var dotsY = nameY + 14;
+    var H = dotsY + 24 - y0;
+    var g = '<svg viewBox="0 ' + y0 + " " + w + " " + H + '" width="' + w + '" height="' + H +
+      '" style="max-width:' + w + 'px" role="group" aria-label="' + K.name +
+      (rig.concert ? ", as it sounds" : ", written") + ', notes ' + (start + 1) + " to " + (start + line.length) + '">';
+    for (var i = 0; i < 5; i++)
+      g += '<line class="ln" x1="0" x2="' + w + '" y1="' + (TOP + i * SP) + '" y2="' + (TOP + i * SP) + '"/>';
+    g += '<path class="clef" d="' + clefPath(4) + '"/>' +
+         '<circle class="dot" cx="' + (4 + 8 * SP / 8) + '" cy="' + (TOP + 3 * SP + 20 * SP / 8) + '" r="2.4"/>';
+    // the key signature, in the order it is always written
+    var sx = 36;
+    SIG_ORDER[sigDir].forEach(function (l, k) {
+      if (K.sig[l] === 0) return;
+      g += '<path class="acc" stroke-width="1.5" d="' + accPath(sigDir, sx, yStep(SIG_STEPS[sigDir][k])) + '"/>';
+      sx += 8;
+    });
+    // what each letter currently reads as on this line: the signature, until an accidental says otherwise
+    var state = {};
+    line.forEach(function (o, j) {
+      var x = head + j * gap + gap / 2, y = yStep(o.step), c = o.c;
+      var sel = c && selected.p === c.p && selected.si === c.si;
+      var nm = nameIn(o.midi, rig.concert);
+      var t = signed(c.cents);
+      g += '<g class="sn' + (sel ? " on" : "") + (o.n.deg === 0 ? " tonic" : "") +
+        '" tabindex="0" role="button" data-p="' + c.p + '" data-si="' + c.si + '" aria-label="' +
+        (rig.concert ? "" : "written ") + nm.pc + nm.oct + ", valves " + c.slot.nm + ", partial " + c.p + ", " +
+        t.t + ' cents">' +
+        '<rect class="hit" x="' + (x - gap / 2 + 1) + '" y="' + (y0 + 1) + '" width="' + (gap - 2) + '" height="' + (H - 2) + '"/>';
+      for (var ls = 40; ls <= o.step; ls += 2)
+        g += '<line class="ln" x1="' + (x - 9) + '" x2="' + (x + 9) + '" y1="' + yStep(ls) + '" y2="' + yStep(ls) + '"/>';
+      for (ls = 28; ls >= o.step; ls -= 2)
+        g += '<line class="ln" x1="' + (x - 9) + '" x2="' + (x + 9) + '" y1="' + yStep(ls) + '" y2="' + yStep(ls) + '"/>';
+      var sk = o.step, cur = sk in state ? state[sk] : K.sig[o.n.letter];
+      if (cur !== o.n.alter) {
+        g += '<path class="acc" stroke-width="1.4" d="' + accPath(o.n.alter, x - 13, y) + '"/>';
+        state[sk] = o.n.alter;
+      }
+      g += '<ellipse class="head" cx="' + x + '" cy="' + y + '" rx="5.6" ry="3.7" transform="rotate(-18 ' + x + " " + y + ')"/>';
+      // the name, so nobody has to count ledger lines to know what they're playing
+      g += '<text class="nn" x="' + x + '" y="' + nameY + '">' + nm.pc + "</text>";
+      // the fingering, drawn like the column heads: three valves, the pressed ones filled
+      [1,2,3].forEach(function (v, k) {
+        g += '<circle class="vd' + (c.slot.v.indexOf(v) >= 0 ? " on" : "") + '" cx="' + (x - 7.5 + k * 7.5) +
+          '" cy="' + dotsY + '" r="3"/>';
+      });
+      g += '<text class="ct ' + t.k + (c.p === 7 ? " p7" : "") + '" x="' + x + '" y="' + (dotsY + 17) + '">' + t.t + "</text>";
+      g += "</g>";
+    });
+    html += g + "</svg>";
+  }
+  scoreEl.innerHTML = html;
+}
+scoreEl.addEventListener("click", function (e) {
+  var g = e.target.closest(".sn");
+  if (g) select(+g.dataset.p, +g.dataset.si, true);
+});
+scoreEl.addEventListener("keydown", function (e) {
+  var g = e.target.closest(".sn");
+  if (g && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    select(+g.dataset.p, +g.dataset.si, true);
+    var again = scoreEl.querySelector('.sn[data-p="' + g.dataset.p + '"][data-si="' + g.dataset.si + '"]');
+    if (again) again.focus();
+  }
+});
+window.addEventListener("resize", function () {
+  if (KEY_W && Math.abs(scoreEl.clientWidth - scoreW) > 8) paintScore();
+});
+
+/* Up from the lowest tonic on the horn to the highest, and back down. */
+var scaleVoices = [];
+function playScale() {
+  scaleVoices.forEach(function (o) { try { o.stop(); } catch (e) {} });
+  var was = scaleVoices.length;
+  scaleVoices = [];
+  var btn = document.getElementById("kPlay");
+  btn.setAttribute("aria-pressed", "false");
+  if (was) return;
+  var notes = scaleNotes(), i0 = -1, i1 = -1;
+  notes.forEach(function (o, i) { if (o.n.deg === 0) { if (i0 < 0) i0 = i; i1 = i; } });
+  if (i0 < 0) return;
+  var run = notes.slice(i0, i1 + 1);
+  run = run.concat(run.slice(0, -1).reverse());
+  audio();
+  var t = ac.currentTime + .05, step = .32;
+  run.forEach(function (o, k) { scaleVoices.push(blow(o.c.actualHz, t + k * step, step + .04, .26)); });
+  btn.setAttribute("aria-pressed", "true");
+  var last = scaleVoices[scaleVoices.length - 1];
+  last.onended = function () {
+    if (scaleVoices[scaleVoices.length - 1] === last) {
+      scaleVoices = []; btn.setAttribute("aria-pressed", "false");
+    }
+  };
+}
+
+document.getElementById("kTonic").addEventListener("change", function () {
+  setKey(parseInt(this.value, 10), key.mode);
+});
+document.getElementById("kMode").addEventListener("change", function () {
+  setKey(key.tonic, this.value);
+});
+document.getElementById("kPlay").addEventListener("click", playScale);
+
 /* ══ controls ═══════════════════════════════════════════════════════════ */
 
 function toggle(id, key) {
@@ -573,9 +949,13 @@ document.getElementById("tPitch").addEventListener("click", function () {
   rig.concert = !rig.concert;
   this.setAttribute("aria-pressed", String(rig.concert));
   this.textContent = rig.concert ? "Concert" : "Written";
+  try { localStorage.setItem("slot.read", rig.concert ? "concert" : "written"); } catch (e) {}
+  keyOptions();
   paint();
 });
-document.getElementById("tPitch").textContent = "Written";
+try { if (localStorage.getItem("slot.read") === "written") rig.concert = false; } catch (e) {}
+document.getElementById("tPitch").textContent = rig.concert ? "Concert" : "Written";
+document.getElementById("tPitch").setAttribute("aria-pressed", String(rig.concert));
 
 function wireSlider(id, key, fmt, out) {
   var el = document.getElementById(id), o = document.getElementById(out);
@@ -683,7 +1063,7 @@ function tick(now) {
   if (r) {
     var n = nearestCell(r.hz);
     var c = n.c;
-    var w = noteName(c.writtenMidi), cn = noteName(c.concertMidi);
+    var w = nameIn(c.writtenMidi, false), cn = nameIn(c.concertMidi, true);
     var offTarget = 1200 * Math.log2(r.hz / c.targetHz);
     hzEl.textContent = r.hz.toFixed(1) + " Hz";
     wEl.innerHTML = "partial <b>" + c.p + "</b> on <b>" + c.slot.nm + "</b> — written " +
@@ -753,6 +1133,22 @@ document.getElementById("bListen").addEventListener("click", function () {
 
 buildLattice();
 select(3, 6, false);      // written C♯4 — the worst note on the horn
+(function () {            // the last key you picked, if this browser kept it
+  var k = null;
+  try { k = JSON.parse(localStorage.getItem("slot.key")); } catch (e) {}
+  if (k && typeof k.tonic === "number" && k.tonic >= -1 && k.tonic < 12) setKey(k.tonic, k.mode);
+  else keyOptions();
+})();
+
+/* ══ offline ════════════════════════════════════════════════════════════
+   sw.js keeps a copy of the page so an installed slot opens with no network.
+   updateViaCache:"none" makes every check ask the network for sw.js itself,
+   since Pages serves it with a ten-minute cache.                           */
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js", { updateViaCache:"none" }).catch(function () {});
+  });
+}
 </script>
 </body>
 </html>
